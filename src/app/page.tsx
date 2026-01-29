@@ -1,66 +1,145 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+'use client';
 
-export default function Home() {
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useLanguage } from '@/lib/LanguageContext';
+import { Language } from '@/lib/mock-data';
+import styles from './page.module.css';
+import { ChevronRight, Globe, Mail, Lock, Sparkles } from 'lucide-react';
+
+export default function LoginPage() {
+  const [isLogin, setIsLogin] = useState(true);
+  const [showLang, setShowLang] = useState(false);
+  const router = useRouter();
+  const { t, language, setLanguage } = useLanguage();
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    router.push('/dashboard');
+  };
+
+  const languages = [
+    { code: 'fr', label: 'Français' },
+    { code: 'ar', label: 'العربية' },
+    { code: 'es', label: 'Español' },
+    { code: 'ru', label: 'Русский' },
+    { code: 'zh', label: '中文' },
+  ];
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className={styles.container}>
+      {/* Background with Parallax effect */}
+      <div className={styles.visualSection}>
+        <motion.div
+          initial={{ scale: 1.1, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 2 }}
+          className={styles.bgImage}
         />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+        <div className={styles.overlay} />
+
+        <div className={styles.contentWrapper}>
+          <motion.div
+            initial={{ y: 30, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.5, duration: 1 }}
+            className={styles.logoBadge}
           >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+            <img src="/logo.png" alt="Vendôme" className={styles.mainLogo} />
+          </motion.div>
+
+          <motion.h1
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.8, duration: 1 }}
+            className={styles.heroTitle}
           >
-            Documentation
-          </a>
+            {t('welcome')}
+          </motion.h1>
+
+          <motion.p
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 1, duration: 1 }}
+            className={styles.heroSubtitle}
+          >
+            {t('tagline')}
+          </motion.p>
         </div>
-      </main>
+
+        <div className={styles.langWrapper} onClick={() => setShowLang(!showLang)}>
+          <Globe className={styles.langIcon} size={18} />
+          <span className={styles.langLabel}>{language.toUpperCase()}</span>
+          <AnimatePresence>
+            {showLang && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className={styles.langDropdown}
+              >
+                {languages.map((lang) => (
+                  <button
+                    key={lang.code}
+                    className={`${styles.langOption} ${language === lang.code ? styles.langOptionActive : ''}`}
+                    onClick={() => setLanguage(lang.code as Language)}
+                  >
+                    {lang.label}
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
+
+      <div className={styles.formSection}>
+        <div className={styles.formCard}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={isLogin ? 'login' : 'signup'}
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.5 }}
+              className={styles.formInner}
+            >
+              <div className={styles.formHeader}>
+                <Sparkles className={styles.headerIcon} />
+                <h2>{isLogin ? t('signIn') : t('createAccount')}</h2>
+                <p>{isLogin ? 'Elite Access Only' : 'Join our exclusive community'}</p>
+              </div>
+
+              <form onSubmit={handleSubmit} className={styles.form}>
+                <div className={styles.inputBox}>
+                  <Mail className={styles.inputIcon} size={18} />
+                  <input type="email" placeholder={t('email')} required />
+                </div>
+
+                <div className={styles.inputBox}>
+                  <Lock className={styles.inputIcon} size={18} />
+                  <input type="password" placeholder={t('password')} required />
+                </div>
+
+                {isLogin && <a href="#" className={styles.forgot}>{t('forgot')}</a>}
+
+                <button type="submit" className={styles.buttonPremium}>
+                  {isLogin ? t('signIn') : t('signUp')}
+                  <ChevronRight size={18} />
+                </button>
+              </form>
+
+              <div className={styles.switchBox}>
+                <span>{isLogin ? t('noAccount') : t('haveAccount')}</span>
+                <button onClick={() => setIsLogin(!isLogin)}>
+                  {isLogin ? t('createAccount') : t('signIn')}
+                </button>
+              </div>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   );
 }

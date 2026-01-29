@@ -1,0 +1,641 @@
+.container {
+    min-height: 100vh;
+    background: #fdfaf7;
+    position: relative;
+    overflow-x: hidden;
+    color: #1A0F0A;
+}
+
+/* --- IMMERSIVE HERO BACKGROUND --- */
+.heroBg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+}
+
+.heroBgImage {
+    width: 100%;
+    height: 60vh;
+    background-size: cover;
+    background-position: center;
+    filter: blur(80px) brightness(0.7);
+    opacity: 0.2;
+}
+
+.heroBgOverlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 0%, #fdfaf7 60%);
+}
+
+.nav {
+    position: relative;
+    z-index: 100;
+    padding: 50px 80px;
+}
+
+.backBtn {
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 16px 32px;
+    border-radius: 50px;
+    cursor: pointer;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-size: 0.85rem;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.05);
+    color: #1A0F0A;
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+}
+
+.backBtn:hover {
+    background: #1A0F0A;
+    color: white;
+    transform: translateX(-10px);
+}
+
+.main {
+    position: relative;
+    z-index: 10;
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 0 80px 100px;
+}
+
+.profileLayout {
+    display: grid;
+    grid-template-columns: 520px 1fr;
+    gap: 120px;
+}
+
+/* --- VISUAL COLUMN --- */
+.visualColumn {
+    display: flex;
+    flex-direction: column;
+    gap: 50px;
+}
+
+.imageCard {
+    position: relative;
+    border-radius: 60px;
+    overflow: hidden;
+    box-shadow: 0 60px 120px rgba(44, 24, 16, 0.15);
+    aspect-ratio: 4/5.5;
+    background: white;
+}
+
+.profileImg {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.floatingBadge {
+    position: absolute;
+    top: 40px;
+    left: 40px;
+    background: #E2B45C;
+    padding: 15px 30px;
+    border-radius: 50px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 900;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #1A0F0A;
+    box-shadow: 0 15px 30px rgba(226, 180, 92, 0.3);
+}
+
+.statsGrid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+}
+
+.statBox {
+    background: white;
+    padding: 40px;
+    border-radius: 40px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.02);
+}
+
+.statVal {
+    font-size: 2.8rem;
+    font-weight: 950;
+    color: #1A0F0A;
+    line-height: 1;
+}
+
+.statLabel {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #73685F;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+}
+
+.expertiseCard {
+    background: white;
+    padding: 50px;
+    border-radius: 50px;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.04);
+}
+
+.expertiseCard h3 {
+    font-size: 1.5rem;
+    margin-bottom: 35px;
+    font-weight: 900;
+}
+
+.expertiseList {
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+
+.expertiseItem {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.expHeader {
+    display: flex;
+    justify-content: space-between;
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: #73685F;
+}
+
+.expBar {
+    height: 8px;
+    background: #f0ece9;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.expProgress {
+    height: 100%;
+    background: #E2B45C;
+    border-radius: 10px;
+}
+
+/* --- INFO COLUMN --- */
+.infoColumn {
+    display: flex;
+    flex-direction: column;
+}
+
+.awardBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #E2B45C;
+    font-weight: 950;
+    letter-spacing: 3px;
+    font-size: 0.9rem;
+    margin-bottom: 25px;
+}
+
+.name {
+    font-size: 8rem;
+    line-height: 0.85;
+    margin-bottom: 25px;
+    color: #1A0F0A;
+    letter-spacing: -5px;
+    font-weight: 950;
+}
+
+.roleTitle {
+    font-size: 2.2rem;
+    color: #73685F;
+    font-weight: 300;
+    margin-bottom: 80px;
+}
+
+.glassCard {
+    background: white;
+    padding: 80px;
+    border-radius: 60px;
+    margin-bottom: 80px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.04);
+    position: relative;
+}
+
+.cardHeader {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    margin-bottom: 40px;
+}
+
+.cardHeader h3 {
+    font-size: 2.5rem;
+    font-weight: 900;
+    letter-spacing: -1px;
+}
+
+.bioText {
+    font-size: 1.4rem;
+    line-height: 1.8;
+    color: #444;
+    margin-bottom: 60px;
+}
+
+.quickFeatures {
+    display: flex;
+    gap: 40px;
+    border-top: 1px solid #f0ece9;
+    padding-top: 40px;
+}
+
+.qFeature {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 800;
+    font-size: 0.95rem;
+    color: #73685F;
+}
+
+.qFeature svg {
+    color: #E2B45C;
+}
+
+/* --- FEEDBACK SYSTEM --- */
+.feedbackSection {
+    background: #1A0F0A;
+    border-radius: 60px;
+    padding: 100px;
+    color: white;
+    box-shadow: 0 50px 120px rgba(26, 15, 10, 0.3);
+}
+
+.feedbackHeader {
+    margin-bottom: 60px;
+}
+
+.feedbackTitle {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    margin-bottom: 15px;
+}
+
+.feedbackTitle h3 {
+    font-size: 3rem;
+    font-weight: 900;
+}
+
+.feedbackHeader p {
+    font-size: 1.2rem;
+    opacity: 0.6;
+}
+
+.starRow {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 60px;
+}
+
+.starBtn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+}
+
+.inputGroup {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+}
+
+.commentArea {
+    width: 100%;
+    height: 220px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 40px;
+    padding: 40px;
+    color: white;
+    font-family: inherit;
+    font-size: 1.25rem;
+    outline: none;
+    resize: none;
+    transition: all 0.5s;
+}
+
+.commentArea:focus {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #E2B45C;
+}
+
+.submitRow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 40px;
+}
+
+.privacyMsg {
+    max-width: 300px;
+    font-size: 0.9rem;
+    opacity: 0.4;
+    line-height: 1.5;
+}
+
+.submitBtn {
+    background: #E2B45C;
+    color: #1A0F0A;
+    padding: 24px 60px;
+    border-radius: 30px;
+    font-weight: 950;
+    font-size: 1.2rem;
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    transition: all 0.3s;
+}
+
+.testimonials {
+    margin-top: 100px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 60px;
+}
+
+.testimonials h4 {
+    font-size: 1.8rem;
+    margin-bottom: 40px;
+    font-weight: 900;
+    color: #E2B45C;
+}
+
+.testimonialCard {
+    background: rgba(255, 255, 255, 0.04);
+    padding: 50px;
+    border-radius: 45px;
+}
+
+.tMeta {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    margin-bottom: 25px;
+}
+
+.tStars {
+    display: flex;
+    gap: 8px;
+}
+
+.tMeta span {
+    font-size: 0.9rem;
+    opacity: 0.6;
+    font-weight: 800;
+}
+
+/* --- ORBS --- */
+.orbOne {
+    position: fixed;
+    top: -15%;
+    right: -10%;
+    width: 900px;
+    height: 900px;
+    background: radial-gradient(circle, rgba(226, 180, 92, 0.1) 0%, transparent 70%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+.orbTwo {
+    position: fixed;
+    bottom: -20%;
+    left: -10%;
+    width: 1000px;
+    height: 1000px;
+    background: radial-gradient(circle, rgba(226, 180, 92, 0.08) 0%, transparent 70%);
+    z-index: 0;
+    pointer-events: none;
+}
+
+/* --- RESPONSIVE --- */
+@media (max-width: 1600px) {
+    .name {
+        font-size: 6rem;
+    }
+
+    .profileLayout {
+        gap: 80px;
+    }
+}
+
+@media (max-width: 1200px) {
+    .profileLayout {
+        grid-template-columns: 1fr;
+        gap: 60px;
+    }
+
+    .name {
+        font-size: 5rem;
+    }
+
+    .imageCard {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+
+    .visualColumn {
+        max-width: 600px;
+        margin: 0 auto;
+        width: 100%;
+    }
+}
+
+@media (max-width: 768px) {
+    .nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        padding: 15px 25px;
+        z-index: 1000;
+        background: rgba(253, 250, 247, 0.96);
+        backdrop-filter: blur(20px);
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+        display: flex;
+        justify-content: center;
+    }
+
+    .backBtn {
+        padding: 14px 28px;
+        width: 100%;
+        justify-content: center;
+    }
+
+    .main {
+        padding: 90px 20px 60px;
+    }
+
+    .heroBgImage {
+        height: 100vh;
+        opacity: 0.25;
+        filter: blur(40px) brightness(0.6);
+    }
+
+    .profileLayout {
+        grid-template-columns: 1fr;
+        gap: 50px;
+    }
+
+    .imageCard {
+        border-radius: 40px;
+        box-shadow: 0 40px 80px rgba(44, 24, 16, 0.15);
+    }
+
+    .floatingBadge {
+        top: 25px;
+        left: 25px;
+        padding: 10px 20px;
+        font-size: 0.75rem;
+    }
+
+    .statsGrid {
+        gap: 15px;
+    }
+
+    .statBox {
+        padding: 30px 20px;
+        border-radius: 35px;
+    }
+
+    .statVal {
+        font-size: 2.2rem;
+    }
+
+    .expertiseCard {
+        padding: 40px 30px;
+        border-radius: 40px;
+    }
+
+    .expertiseList {
+        gap: 20px;
+    }
+
+    .name {
+        font-size: 4.5rem;
+        letter-spacing: -2px;
+        line-height: 0.95;
+    }
+
+    .roleTitle {
+        font-size: 1.8rem;
+        margin-bottom: 50px;
+    }
+
+    .glassCard {
+        padding: 50px 30px;
+        border-radius: 45px;
+    }
+
+    .cardHeader h3 {
+        font-size: 2rem;
+    }
+
+    .bioText {
+        font-size: 1.25rem;
+        line-height: 1.7;
+    }
+
+    .quickFeatures {
+        flex-direction: column;
+        gap: 20px;
+    }
+
+    .feedbackSection {
+        padding: 60px 30px;
+        border-radius: 45px;
+    }
+
+    .feedbackTitle h3 {
+        font-size: 2.5rem;
+    }
+
+    .starRow {
+        gap: 15px;
+    }
+
+    .starBtn svg {
+        width: 34px;
+        height: 34px;
+    }
+
+    .commentArea {
+        padding: 25px;
+        font-size: 1.15rem;
+        height: 180px;
+        border-radius: 30px;
+    }
+
+    .submitBtn {
+        padding: 22px;
+        width: 100%;
+        font-size: 1rem;
+    }
+
+    .submitRow {
+        flex-direction: column;
+        gap: 30px;
+        text-align: center;
+    }
+
+    .privacyMsg {
+        max-width: 100%;
+        margin: 0;
+    }
+
+    .testimonials h4 {
+        font-size: 1.6rem;
+    }
+
+    .testimonialCard {
+        padding: 40px 30px;
+        border-radius: 35px;
+    }
+}
+
+@media (max-width: 480px) {
+    .name {
+        font-size: 3.5rem;
+    }
+
+    .roleTitle {
+        font-size: 1.4rem;
+    }
+
+    .statVal {
+        font-size: 1.8rem;
+    }
+
+    .feedbackTitle h3 {
+        font-size: 1.8rem;
+    }
+}
