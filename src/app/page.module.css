@@ -53,7 +53,7 @@
 }
 
 .heroTitle {
-  font-size: 5.5rem;
+  font-size: 4.5rem;
   color: white;
   margin-bottom: 15px;
   line-height: 1;
@@ -190,6 +190,26 @@
   color: var(--text-dim);
 }
 
+.eyeIcon {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px;
+  transition: color 0.3s ease;
+}
+
+.eyeIcon:hover {
+  color: var(--accent);
+}
+
 .inputBox input {
   width: 100%;
   padding: 22px 22px 22px 60px;
@@ -213,6 +233,17 @@
   font-weight: 700;
   color: var(--primary);
   text-decoration: none;
+}
+
+.errorText {
+  color: #ff4d4d;
+  font-weight: 600;
+  font-size: 0.9rem;
+  background: rgba(255, 77, 77, 0.1);
+  padding: 10px 15px;
+  border-radius: 10px;
+  border-left: 4px solid #ff4d4d;
+  margin-bottom: 5px;
 }
 
 .buttonPremium {
@@ -260,11 +291,11 @@
 
 @media (max-width: 1200px) {
   .heroTitle {
-    font-size: 4rem;
+    font-size: 3.5rem;
   }
 
   .visualSection {
-    flex: 1.2;
+    flex: 1;
   }
 }
 
@@ -274,15 +305,44 @@
   }
 
   .visualSection {
-    height: 40vh;
+    height: 45vh;
     flex: none;
+    padding: 40px 20px;
   }
 
   .heroTitle {
-    font-size: 3rem;
+    font-size: 2.8rem;
+  }
+
+  .heroSubtitle {
+    font-size: 1.1rem;
+    letter-spacing: 3px;
   }
 
   .formSection {
-    padding: 40px 25px;
+    padding: 50px 25px;
+  }
+
+  .formHeader h2 {
+    font-size: 2.2rem;
+  }
+
+  .langWrapper {
+    top: 20px;
+    left: 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  .heroTitle {
+    font-size: 2.2rem;
+  }
+
+  .visualSection {
+    height: 40vh;
+  }
+
+  .formHeader h2 {
+    font-size: 1.8rem;
   }
 }

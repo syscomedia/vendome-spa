@@ -1,8 +1,8 @@
 :root {
   --primary: #1A0F0A;
   --secondary: #2D1B13;
-  --accent: #E2B45C;
-  /* More vibrant gold */
+  --accent: #DFB96D;
+  /* Premium Champagne Gold */
   --accent-light: #F2D591;
   --bg-cream: #F8F5F0;
   --text-main: #2A211C;
@@ -49,7 +49,7 @@ h4 {
 }
 
 .text-gold {
-  background: linear-gradient(135deg, #E2B45C 0%, #F2D591 50%, #C89B48 100%);
+  background: linear-gradient(135deg, #DFB96D 0%, #F5E0B6 50%, #BFA17A 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;

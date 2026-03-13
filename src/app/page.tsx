@@ -1,22 +1,91 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '@/lib/LanguageContext';
 import { Language } from '@/lib/mock-data';
 import styles from './page.module.css';
-import { ChevronRight, Globe, Mail, Lock, Sparkles } from 'lucide-react';
+import { ChevronRight, Globe, Mail, Lock, Sparkles, Users, Eye, EyeOff } from 'lucide-react';
+
+import { useSession, signIn } from "next-auth/react";
+import { useMutation } from '@apollo/client/react';
+import { LOGIN_MUTATION, REGISTER_MUTATION, SYNC_GOOGLE_USER_MUTATION } from '@/graphql/mutations';
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [showLang, setShowLang] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [name, setName] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   const router = useRouter();
   const { t, language, setLanguage } = useLanguage();
+  const { data: session } = useSession();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [login] = useMutation(LOGIN_MUTATION);
+  const [register] = useMutation(REGISTER_MUTATION);
+  const [syncGoogleUser] = useMutation(SYNC_GOOGLE_USER_MUTATION);
+
+  useEffect(() => {
+    if (session?.user?.email) {
+      const handleGoogleSync = async () => {
+        try {
+          const { data }: any = await syncGoogleUser({
+            variables: {
+              email: session.user?.email,
+              name: session.user?.name || session.user?.email?.split('@')[0] || 'User'
+            }
+          });
+
+          if (data?.syncGoogleUser?.user) {
+            localStorage.setItem('user', JSON.stringify(data.syncGoogleUser.user));
+            router.push('/dashboard');
+          } else if (data?.syncGoogleUser?.error) {
+            setErrorMsg(data.syncGoogleUser.error);
+          }
+        } catch (e) {
+          console.error("Google Sync Error", e);
+          setErrorMsg(t('failedGoogleSync'));
+        }
+      };
+
+      const localUser = localStorage.getItem('user');
+      if (!localUser) {
+        handleGoogleSync();
+      } else {
+        router.push('/dashboard');
+      }
+    }
+  }, [session, router, syncGoogleUser]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    router.push('/dashboard');
+    setErrorMsg('');
+
+    try {
+      if (isLogin) {
+        const { data }: any = await login({ variables: { email, password } });
+        if (data.login.error) {
+          setErrorMsg(data.login.error);
+        } else {
+          localStorage.setItem('user', JSON.stringify(data.login.user));
+          router.push('/dashboard');
+        }
+      } else {
+        const { data }: any = await register({ variables: { email, password, name } });
+        if (data.register.error) {
+          setErrorMsg(data.register.error);
+        } else {
+          setIsLogin(true);
+          setErrorMsg(t('accountCreated'));
+        }
+      }
+    } catch (err) {
+      setErrorMsg(t('errorOccurred'));
+      console.error(err);
+    }
   };
 
   const languages = [
@@ -108,18 +177,92 @@ export default function LoginPage() {
               <div className={styles.formHeader}>
                 <Sparkles className={styles.headerIcon} />
                 <h2>{isLogin ? t('signIn') : t('createAccount')}</h2>
-                <p>{isLogin ? 'Elite Access Only' : 'Join our exclusive community'}</p>
+                <p>{isLogin ? t('eliteAccessOnly') : t('joinCommunity')}</p>
+              </div>
+
+              {/* Google Sign In Button */}
+              <button
+                onClick={() => signIn('google')}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  marginBottom: '10px', // Replaced 20px with 10px to reduce space
+                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '12px',
+                  color: 'white',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '10px',
+                  cursor: 'pointer',
+                  fontSize: '0.95rem',
+                  fontWeight: 500,
+                  transition: 'all 0.3s ease'
+                }}
+                onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
+                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+              >
+                <img src="https://authjs.dev/img/providers/google.svg" alt="Google" style={{ width: '20px', height: '20px' }} />
+                {t('continueGoogle')}
+              </button>
+
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                margin: '15px 0', // Replaced 20px with 15px
+                color: 'rgba(255,255,255,0.3)',
+                fontSize: '0.8rem'
+              }}>
+                <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
+                <span style={{ padding: '0 10px' }}>{t('or')}</span>
+                <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
               </div>
 
               <form onSubmit={handleSubmit} className={styles.form}>
+                {errorMsg && <p className={styles.errorText}>{errorMsg}</p>}
+
+                {!isLogin && (
+                  <div className={styles.inputBox}>
+                    <Users className={styles.inputIcon} size={18} />
+                    <input
+                      type="text"
+                      placeholder={t('fullName')}
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                    />
+                  </div>
+                )}
+
                 <div className={styles.inputBox}>
                   <Mail className={styles.inputIcon} size={18} />
-                  <input type="email" placeholder={t('email')} required />
+                  <input
+                    type="email"
+                    placeholder={t('email')}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
                 </div>
 
                 <div className={styles.inputBox}>
                   <Lock className={styles.inputIcon} size={18} />
-                  <input type="password" placeholder={t('password')} required />
+                  <input
+                    type={showPassword ? "text" : "password"}
+                    placeholder={t('password')}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                  <button
+                    type="button"
+                    className={styles.eyeIcon}
+                    onClick={() => setShowPassword(!showPassword)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
                 </div>
 
                 {isLogin && <a href="#" className={styles.forgot}>{t('forgot')}</a>}

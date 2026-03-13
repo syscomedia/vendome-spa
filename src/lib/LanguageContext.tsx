@@ -6,7 +6,7 @@ import { Language, TRANSLATIONS } from './mock-data';
 interface LanguageContextType {
     language: Language;
     setLanguage: (lang: Language) => void;
-    t: (key: keyof typeof TRANSLATIONS['fr']) => string;
+    t: (key: keyof typeof TRANSLATIONS['fr'], vars?: Record<string, any>) => string;
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
@@ -14,8 +14,15 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [language, setLanguage] = useState<Language>('fr');
 
-    const t = (key: keyof typeof TRANSLATIONS['fr']) => {
-        return TRANSLATIONS[language][key] || TRANSLATIONS['fr'][key];
+    const t = (key: keyof typeof TRANSLATIONS['fr'], vars?: Record<string, any>) => {
+        const currentLangTranslations = TRANSLATIONS[language] as Record<keyof typeof TRANSLATIONS['fr'], string>;
+        let text = currentLangTranslations[key] || TRANSLATIONS['fr'][key];
+        if (vars) {
+            Object.keys(vars).forEach(v => {
+                text = text.replace(`{${v}}`, vars[v]);
+            });
+        }
+        return text;
     };
 
     return (

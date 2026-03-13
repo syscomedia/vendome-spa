@@ -211,7 +211,7 @@
 }
 
 .name {
-    font-size: 8rem;
+    font-size: 6rem;
     line-height: 0.85;
     margin-bottom: 25px;
     color: #1A0F0A;
@@ -249,10 +249,10 @@
 }
 
 .bioText {
-    font-size: 1.4rem;
-    line-height: 1.8;
+    font-size: 1.25rem;
+    line-height: 1.7;
     color: #444;
-    margin-bottom: 60px;
+    margin-bottom: 40px;
 }
 
 .quickFeatures {
@@ -624,18 +624,31 @@
 
 @media (max-width: 480px) {
     .name {
-        font-size: 3.5rem;
+        font-size: 3rem;
     }
 
     .roleTitle {
-        font-size: 1.4rem;
+        font-size: 1.2rem;
+        margin-bottom: 40px;
     }
 
     .statVal {
-        font-size: 1.8rem;
+        font-size: 1.6rem;
     }
 
     .feedbackTitle h3 {
         font-size: 1.8rem;
+    }
+
+    .statBox {
+        padding: 20px 15px;
+    }
+
+    .bioText {
+        font-size: 1.1rem;
+    }
+
+    .glassCard {
+        padding: 35px 20px;
     }
 }

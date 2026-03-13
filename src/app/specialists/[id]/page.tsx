@@ -2,6 +2,7 @@
 
 import { useParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import LoadingScreen from '@/components/LoadingScreen';
 import { useState, useEffect } from 'react';
 import { PRESTATAIRES } from '@/lib/mock-data';
 import { useLanguage } from '@/lib/LanguageContext';
@@ -37,7 +38,7 @@ export default function SpecialistDetail() {
         return <div className={styles.error}>Specialist not found</div>;
     }
 
-    if (!mounted) return null;
+    if (!mounted) return <LoadingScreen />;
 
     const expertise = [
         { name: "Technique", val: 98 },
@@ -67,7 +68,7 @@ export default function SpecialistDetail() {
                     className={styles.backBtn}
                 >
                     <ArrowLeft size={20} />
-                    <span>Retour au Tableau de bord</span>
+                    <span>{t('backToDashboard')}</span>
                 </motion.button>
             </nav>
 
@@ -89,7 +90,7 @@ export default function SpecialistDetail() {
                                 className={styles.floatingBadge}
                             >
                                 <Trophy size={18} />
-                                <span>MEILLEUR SPÉCIALISTE 2025</span>
+                                <span>{t('bestSpecialist2025')}</span>
                             </motion.div>
                         </div>
 
@@ -97,22 +98,22 @@ export default function SpecialistDetail() {
                             <div className={styles.statBox}>
                                 <Star className="text-gold" fill="currentColor" size={28} />
                                 <span className={styles.statVal}>{staff.rating}</span>
-                                <span className={styles.statLabel}>ÉVALUATION</span>
+                                <span className={styles.statLabel}>{t('evaluationLabel')}</span>
                             </div>
                             <div className={styles.statBox}>
                                 <Heart className="text-gold" fill="currentColor" size={28} />
                                 <span className={styles.statVal}>1.2k</span>
-                                <span className={styles.statLabel}>CLIENTS SATISFAITS</span>
+                                <span className={styles.statLabel}>{t('satisfiedClients')}</span>
                             </div>
                         </div>
 
                         <div className={styles.expertiseCard}>
-                            <h3>Niveaux d'Expertise</h3>
+                            <h3>{t('expertiseLevels')}</h3>
                             <div className={styles.expertiseList}>
                                 {expertise.map((exp, i) => (
                                     <div key={i} className={styles.expertiseItem}>
                                         <div className={styles.expHeader}>
-                                            <span>{exp.name}</span>
+                                            <span>{t(exp.name.toLowerCase() as any)}</span>
                                             <span>{exp.val}%</span>
                                         </div>
                                         <div className={styles.expBar}>
@@ -137,7 +138,7 @@ export default function SpecialistDetail() {
                                 animate={{ opacity: 1, y: 0 }}
                                 className={styles.awardBadge}
                             >
-                                <Sparkles size={14} /> EXCLUSIVITÉ VENDÔME
+                                <Sparkles size={14} /> {t('vendomeExclusivity')}
                             </motion.div>
                             <motion.h1
                                 initial={{ opacity: 0, y: 20 }}
@@ -165,27 +166,24 @@ export default function SpecialistDetail() {
                         >
                             <div className={styles.cardHeader}>
                                 <Activity size={24} className="text-gold" />
-                                <h3>Parcours d'Excellence</h3>
+                                <h3>{t('journeyOfExcellence')}</h3>
                             </div>
                             <p className={styles.bioText}>
-                                {staff.name} est l'une des figures de proue de notre établissement.
-                                Diplômée des plus prestigieuses académies internationales, elle a consacré sa carrière à la maîtrise des rituels de soin les plus sophistiqués.
-                                Ses protocoles personnalisés en <span className="text-gold">{staff.specialty}</span> sont reconnus pour leurs résultats immédiats et leur dimension profondément relaxante.
-                                Chaque geste est une signature, chaque séance est une renaissance.
+                                {t('staffBioTemplate', { name: staff.name, specialty: staff.specialty })}
                             </p>
 
                             <div className={styles.quickFeatures}>
                                 <div className={styles.qFeature}>
                                     <ShieldCheck size={20} />
-                                    <span>Matériel Propre</span>
+                                    <span>{t('cleanEquipment')}</span>
                                 </div>
                                 <div className={styles.qFeature}>
                                     <Zap size={20} />
-                                    <span>Effet Immédiat</span>
+                                    <span>{t('immediateEffect')}</span>
                                 </div>
                                 <div className={styles.qFeature}>
                                     <Sparkles size={20} />
-                                    <span>Luxe Absolu</span>
+                                    <span>{t('absoluteLuxury')}</span>
                                 </div>
                             </div>
                         </motion.div>
@@ -200,9 +198,9 @@ export default function SpecialistDetail() {
                             <div className={styles.feedbackHeader}>
                                 <div className={styles.feedbackTitle}>
                                     <MessageSquare size={28} className="text-gold" />
-                                    <h3>Livre d'Or Électronique</h3>
+                                    <h3>{t('electronicGuestbook')}</h3>
                                 </div>
-                                <p>Partagez votre précieux avis sur la prestation de {staff.name}</p>
+                                <p>{t('shareValuableReview', { name: staff.name })}</p>
                             </div>
 
                             <div className={styles.ratingInteraction}>
@@ -226,43 +224,43 @@ export default function SpecialistDetail() {
 
                                 <div className={styles.inputGroup}>
                                     <textarea
-                                        placeholder={`Que souhaitez-vous dire à ${staff.name} ?...`}
+                                        placeholder={t('whatToSayTo', { name: staff.name })}
                                         value={comment}
                                         onChange={(e) => setComment(e.target.value)}
                                         className={styles.commentArea}
                                     />
                                     <div className={styles.submitRow}>
-                                        <p className={styles.privacyMsg}>Votre avis sera visible publiquement par la communauté Elite.</p>
+                                        <p className={styles.privacyMsg}>{t('publicPrivacyMsg')}</p>
                                         <motion.button
                                             whileHover={{ scale: 1.05, boxShadow: '0 0 40px rgba(226, 180, 92, 0.4)' }}
                                             whileTap={{ scale: 0.95 }}
                                             className={styles.submitBtn}
                                             onClick={() => {
                                                 if (rating === 0) {
-                                                    alert('Veuillez attribuer une note étoilée.');
+                                                    alert(t('pleaseRate'));
                                                     return;
                                                 }
-                                                alert(`Sublime ! Votre avis pour ${staff.name} a été publié.`);
+                                                alert(t('sublimePublished', { name: staff.name }));
                                                 setComment('');
                                                 setRating(0);
                                             }}
                                         >
-                                            PUBLIER MON AVIS <Sparkles size={20} />
+                                            {t('publishMyReview')} <Sparkles size={20} />
                                         </motion.button>
                                     </div>
                                 </div>
                             </div>
 
                             <div className={styles.testimonials}>
-                                <h4>Témoignages de la semaine</h4>
+                                <h4>{t('weeklyTestimonials')}</h4>
                                 <div className={styles.testimonialCard}>
                                     <div className={styles.tMeta}>
                                         <div className={styles.tStars}>
                                             {[1, 2, 3, 4, 5].map(s => <Star key={s} size={16} fill="#E2B45C" color="#E2B45C" />)}
                                         </div>
-                                        <span>Il y a 12 heures</span>
+                                        <span>{t('hoursAgo', { count: 12 })}</span>
                                     </div>
-                                    <p>"Un moment suspendu hors du temps. {staff.name} a des mains de fée et une écoute rare. Je reviendrai sans hésiter pour son expertise en {staff.specialty}."</p>
+                                    <p>"{t('testimonialStaffOne', { name: staff.name, specialty: staff.specialty })}"</p>
                                 </div>
                             </div>
                         </motion.div>

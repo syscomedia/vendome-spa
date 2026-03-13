@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 import { LanguageProvider } from "@/lib/LanguageContext";
+import { ApolloWrapper } from "@/components/ApolloWrapper";
 
 export default function RootLayout({
   children,
@@ -27,9 +28,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${outfit.variable} ${playfair.variable}`}>
-        <LanguageProvider>
-          {children}
-        </LanguageProvider>
+        <ApolloWrapper>
+          <LanguageProvider>
+            {children}
+          </LanguageProvider>
+        </ApolloWrapper>
       </body>
     </html>
   );
