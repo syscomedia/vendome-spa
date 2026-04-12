@@ -111,6 +111,21 @@ h4 {
   animation: shimmer 3s infinite;
 }
 
+@media (max-width: 768px) {
+  .btn-lux {
+    padding: 12px 22px;
+    font-size: 0.72rem;
+    letter-spacing: 1.5px;
+    gap: 7px;
+    border-radius: 50px;
+  }
+
+  .btn-lux:hover {
+    transform: none;
+    box-shadow: none;
+  }
+}
+
 @keyframes float {
   0% {
     transform: translateY(0px);

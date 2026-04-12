@@ -24,7 +24,7 @@ export const resolvers = {
         },
         prestataires: async () => {
             try {
-                const res = await query('SELECT * FROM prestataires');
+                const res = await query('SELECT id, name, role, image, rating, specialty, historique FROM prestataires');
                 return res.rows;
             } catch (e) {
                 console.error('Error fetching prestataires:', e);
@@ -73,7 +73,7 @@ export const resolvers = {
         },
         clients: async () => {
             try {
-                const res = await query("SELECT id, email, name, role, points, tier FROM users ORDER BY name ASC");
+                const res = await query("SELECT id, email, name, role, points, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image FROM users ORDER BY name ASC");
                 return res.rows;
             } catch (e) {
                 console.error('Error fetching clients:', e);
@@ -393,7 +393,7 @@ export const resolvers = {
             await query('DELETE FROM users WHERE id = $1', [userId]);
             return true;
         },
-        updateUser: async (_: any, { userId, email, name, role, password, tier }: any) => {
+        updateUser: async (_: any, { userId, email, name, role, password, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image }: any) => {
             try {
                 let queryText = 'UPDATE users SET ';
                 const values: any[] = [];
@@ -415,17 +415,77 @@ export const resolvers = {
                     updates.push(`tier = $${values.length + 1}`);
                     values.push(tier);
                 }
+                if (hair_color_pref !== undefined) {
+                    updates.push(`hair_color_pref = $${values.length + 1}`);
+                    values.push(hair_color_pref);
+                }
+                if (favorite_coupe !== undefined) {
+                    updates.push(`favorite_coupe = $${values.length + 1}`);
+                    values.push(favorite_coupe);
+                }
+                if (nail_color_pref !== undefined) {
+                    updates.push(`nail_color_pref = $${values.length + 1}`);
+                    values.push(nail_color_pref);
+                }
+                if (music_pref !== undefined) {
+                    updates.push(`music_pref = $${values.length + 1}`);
+                    values.push(music_pref);
+                }
+                if (music_link !== undefined) {
+                    updates.push(`music_link = $${values.length + 1}`);
+                    values.push(music_link);
+                }
+                if (drink_pref !== undefined) {
+                    updates.push(`drink_pref = $${values.length + 1}`);
+                    values.push(drink_pref);
+                }
+                if (skin_type !== undefined) {
+                    updates.push(`skin_type = $${values.length + 1}`);
+                    values.push(skin_type);
+                }
+                if (birthday !== undefined) {
+                    updates.push(`birthday = $${values.length + 1}`);
+                    values.push(birthday);
+                }
+                if (phone !== undefined) {
+                    updates.push(`phone = $${values.length + 1}`);
+                    values.push(phone);
+                }
+                if (coffee_pref !== undefined) {
+                    updates.push(`coffee_pref = $${values.length + 1}`);
+                    values.push(coffee_pref);
+                }
+                if (employee_pref !== undefined) {
+                    updates.push(`employee_pref = $${values.length + 1}`);
+                    values.push(employee_pref);
+                }
+                if (favourite_service !== undefined) {
+                    updates.push(`favourite_service = $${values.length + 1}`);
+                    values.push(favourite_service);
+                }
+                if (allergies !== undefined) {
+                    updates.push(`allergies = $${values.length + 1}`);
+                    values.push(allergies);
+                }
+                if (last_visit_notes !== undefined) {
+                    updates.push(`last_visit_notes = $${values.length + 1}`);
+                    values.push(last_visit_notes);
+                }
+                if (image !== undefined) {
+                    updates.push(`image = $${values.length + 1}`);
+                    values.push(image);
+                }
                 if (password) {
                     updates.push(`password = $${values.length + 1}`);
-                    values.push(password); // Plain text as requested
+                    values.push(password); // Note: still plain text per previous requirements
                 }
 
                 if (updates.length === 0) {
-                    const res = await query('SELECT id, email, name, role, points, tier FROM users WHERE id = $1', [userId]);
+                    const res = await query('SELECT id, email, name, role, points, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image FROM users WHERE id = $1', [userId]);
                     return res.rows[0];
                 }
 
-                queryText += updates.join(', ') + ` WHERE id = $${values.length + 1} RETURNING id, email, name, role, points, tier`;
+                queryText += updates.join(', ') + ` WHERE id = $${values.length + 1} RETURNING id, email, name, role, points, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image`;
                 values.push(userId);
 
                 const res = await query(queryText, values);
@@ -483,6 +543,34 @@ export const resolvers = {
         removeProduct: async (_: any, { id }: any) => {
             await query('DELETE FROM products WHERE id = $1', [id]);
             return true;
+        },
+        updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique }: any) => {
+            try {
+                let queryText = 'UPDATE prestataires SET ';
+                const values: any[] = [];
+                const updates: string[] = [];
+
+                if (name) { updates.push(`name = $${values.length + 1}`); values.push(name); }
+                if (role) { updates.push(`role = $${values.length + 1}`); values.push(role); }
+                if (image) { updates.push(`image = $${values.length + 1}`); values.push(image); }
+                if (specialty) { updates.push(`specialty = $${values.length + 1}`); values.push(specialty); }
+                if (rating !== undefined) { updates.push(`rating = $${values.length + 1}`); values.push(rating); }
+                if (historique !== undefined) { updates.push(`historique = $${values.length + 1}`); values.push(historique); }
+
+                if (updates.length === 0) {
+                    const res = await query('SELECT * FROM prestataires WHERE id = $1', [id]);
+                    return res.rows[0];
+                }
+
+                queryText += updates.join(', ') + ` WHERE id = $${values.length + 1} RETURNING *`;
+                values.push(id);
+
+                const res = await query(queryText, values);
+                return res.rows[0];
+            } catch (e) {
+                console.error('Update specialist error:', e);
+                throw new Error("Failed to update specialist");
+            }
         },
         updateReservationStatus: async (_: any, { id, status }: any) => {
             try {

@@ -175,48 +175,26 @@ export default function LoginPage() {
               className={styles.formInner}
             >
               <div className={styles.formHeader}>
-                <Sparkles className={styles.headerIcon} />
-                <h2>{isLogin ? t('signIn') : t('createAccount')}</h2>
+                <Sparkles className={`${styles.headerIcon} gold-glow`} size={32} />
+                <h2 className="text-gold">{isLogin ? t('signIn') : t('createAccount')}</h2>
                 <p>{isLogin ? t('eliteAccessOnly') : t('joinCommunity')}</p>
               </div>
 
               {/* Google Sign In Button */}
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={() => signIn('google')}
-                style={{
-                  width: '100%',
-                  padding: '12px',
-                  marginBottom: '10px', // Replaced 20px with 10px to reduce space
-                  backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '12px',
-                  color: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '10px',
-                  cursor: 'pointer',
-                  fontSize: '0.95rem',
-                  fontWeight: 500,
-                  transition: 'all 0.3s ease'
-                }}
-                onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.1)'}
-                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'}
+                className={styles.googleButton}
               >
-                <img src="https://authjs.dev/img/providers/google.svg" alt="Google" style={{ width: '20px', height: '20px' }} />
+                <img src="https://authjs.dev/img/providers/google.svg" alt="Google" className={styles.googleIcon} />
                 {t('continueGoogle')}
-              </button>
+              </motion.button>
 
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                margin: '15px 0', // Replaced 20px with 15px
-                color: 'rgba(255,255,255,0.3)',
-                fontSize: '0.8rem'
-              }}>
-                <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
-                <span style={{ padding: '0 10px' }}>{t('or')}</span>
-                <div style={{ flex: 1, height: '1px', backgroundColor: 'rgba(255,255,255,0.1)' }}></div>
+              <div className={styles.divider}>
+                <div className={styles.dividerLine}></div>
+                <span className={styles.dividerText}>{t('or')}</span>
+                <div className={styles.dividerLine}></div>
               </div>
 
               <form onSubmit={handleSubmit} className={styles.form}>

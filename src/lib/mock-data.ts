@@ -164,7 +164,14 @@ export const TRANSLATIONS = {
         goldMember: "Membre Gold",
         normalMember: "Normal",
         success: "Succès",
-        error: "Erreur"
+        error: "Erreur",
+        ficheClient: "Fiche Client",
+        hairColorPref: "Couleur cheveux préférée",
+        coffeePref: "Café préféré",
+        employeePref: "Employé préféré",
+        favouriteService: "Service préféré",
+        allergies: "Allergies / Particularités",
+        lastVisitNotes: "Notes de la dernière visite"
     },
     ar: {
         welcome: "مرحباً بكم في فاندوم",

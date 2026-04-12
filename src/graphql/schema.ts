@@ -18,6 +18,7 @@ export const typeDefs = gql`
     image: String!
     rating: Float!
     specialty: String!
+    historique: String
   }
 
   type Amenity {
@@ -51,6 +52,21 @@ export const typeDefs = gql`
     role: String
     points: Int
     tier: String
+    hair_color_pref: String
+    favorite_coupe: String
+    nail_color_pref: String
+    music_pref: String
+    music_link: String
+    drink_pref: String
+    skin_type: String
+    birthday: String
+    phone: String
+    coffee_pref: String
+    employee_pref: String
+    favourite_service: String
+    allergies: String
+    last_visit_notes: String
+    image: String
   }
 
   type AuthPayload {
@@ -123,8 +139,9 @@ export const typeDefs = gql`
     removeService(id: ID!): Boolean
     updateService(id: ID!, name: String, description: String, price: Float, image: String, duration: String): Service!
     updateUserRole(userId: ID!, role: String!): User!
-    updateUser(userId: ID!, email: String, name: String, role: String, password: String, tier: String): User!
+    updateUser(userId: ID!, email: String, name: String, role: String, password: String, tier: String, hair_color_pref: String, favorite_coupe: String, nail_color_pref: String, music_pref: String, music_link: String, drink_pref: String, skin_type: String, birthday: String, phone: String, coffee_pref: String, employee_pref: String, favourite_service: String, allergies: String, last_visit_notes: String, image: String): User!
     removeUser(userId: ID!): Boolean
+    updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String): Prestataire!
     addProduct(name: String!, description: String!, price: Float!, image: String!): Product!
     updateProduct(id: ID!, name: String, description: String, price: Float, image: String): Product!
     removeProduct(id: ID!): Boolean

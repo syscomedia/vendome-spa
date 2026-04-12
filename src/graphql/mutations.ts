@@ -138,13 +138,24 @@ export const ADD_PRESTATAIRE_MUTATION = gql`
 `;
 
 export const UPDATE_USER_MUTATION = gql`
-  mutation UpdateUser($userId: ID!, $email: String, $name: String, $role: String, $password: String, $tier: String) {
-    updateUser(userId: $userId, email: $email, name: $name, role: $role, password: $password, tier: $tier) {
-      id
-      email
-      name
-      role
-      tier
+  mutation UpdateUser(
+    $userId: ID!, $email: String, $name: String, $role: String, $password: String, $tier: String,
+    $hair_color_pref: String, $favorite_coupe: String, $nail_color_pref: String,
+    $music_pref: String, $music_link: String, $drink_pref: String, $skin_type: String, $birthday: String, $phone: String,
+    $coffee_pref: String, $employee_pref: String, $favourite_service: String,
+    $allergies: String, $last_visit_notes: String, $image: String
+  ) {
+    updateUser(
+      userId: $userId, email: $email, name: $name, role: $role, password: $password, tier: $tier,
+      hair_color_pref: $hair_color_pref, favorite_coupe: $favorite_coupe, nail_color_pref: $nail_color_pref,
+      music_pref: $music_pref, music_link: $music_link, drink_pref: $drink_pref, skin_type: $skin_type, birthday: $birthday, phone: $phone,
+      coffee_pref: $coffee_pref, employee_pref: $employee_pref, favourite_service: $favourite_service,
+      allergies: $allergies, last_visit_notes: $last_visit_notes, image: $image
+    ) {
+      id email name role points tier
+      hair_color_pref favorite_coupe nail_color_pref music_pref music_link drink_pref
+      skin_type birthday phone coffee_pref employee_pref favourite_service
+      allergies last_visit_notes image
     }
   }
 `;
@@ -196,6 +207,20 @@ export const UPDATE_RESERVATION_STATUS_MUTATION = gql`
     updateReservationStatus(id: $id, status: $status) {
       id
       status
+    }
+  }
+`;
+
+export const UPDATE_SPECIALIST_MUTATION = gql`
+  mutation UpdateSpecialist($id: ID!, $name: String, $role: String, $image: String, $specialty: String, $rating: Float, $historique: String) {
+    updateSpecialist(id: $id, name: $name, role: $role, image: $image, specialty: $specialty, rating: $rating, historique: $historique) {
+      id
+      name
+      role
+      image
+      rating
+      specialty
+      historique
     }
   }
 `;

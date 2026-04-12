@@ -18,6 +18,7 @@ export const GET_DASHBOARD_DATA = gql`
       image
       rating
       specialty
+      historique
     }
     amenities {
       name
@@ -46,6 +47,21 @@ export const GET_DASHBOARD_DATA = gql`
       role
       points
       tier
+      hair_color_pref
+      favorite_coupe
+      nail_color_pref
+      music_pref
+      music_link
+      drink_pref
+      skin_type
+      birthday
+      phone
+      coffee_pref
+      employee_pref
+      favourite_service
+      allergies
+      last_visit_notes
+      image
     }
     allReservations: myReservations {
       id

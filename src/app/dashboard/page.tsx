@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import LoadingScreen from '@/components/LoadingScreen';
+import FicheClientTab from '@/components/FicheClientTab';
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { useLanguage } from '@/lib/LanguageContext';
@@ -15,6 +16,7 @@ import {
     UserCheck,
     Users,
     Clock,
+    ClipboardList,
     LayoutDashboard as DashIcon,
     LogOut,
     Star,
@@ -62,8 +64,10 @@ import {
     ADD_PRODUCT_MUTATION,
     UPDATE_PRODUCT_MUTATION,
     REMOVE_PRODUCT_MUTATION,
-    UPDATE_RESERVATION_STATUS_MUTATION
+    UPDATE_RESERVATION_STATUS_MUTATION,
+    UPDATE_SPECIALIST_MUTATION
 } from '@/graphql/mutations';
+import { signOut } from 'next-auth/react';
 
 interface DashboardData {
     services: any[];
@@ -126,6 +130,7 @@ export default function Dashboard() {
     const [updateProduct] = useMutation(UPDATE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [removeProduct] = useMutation(REMOVE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [updateReservationStatus] = useMutation(UPDATE_RESERVATION_STATUS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [updateSpecialist] = useMutation(UPDATE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
 
     const router = useRouter();
     const [activeTab, setActiveTab] = useState('overview');
@@ -168,9 +173,13 @@ export default function Dashboard() {
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', image: '' });
     const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<any>(null);
+    const [isFicheModalOpen, setIsFicheModalOpen] = useState(false);
+    const [selectedClientForFiche, setSelectedClientForFiche] = useState<any>(null);
+    const [isHistoriqueModalOpen, setIsHistoriqueModalOpen] = useState(false);
+    const [selectedSpecialistForHistorique, setSelectedSpecialistForHistorique] = useState<any>(null);
     const { t, language, setLanguage } = useLanguage();
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct') => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct' | 'ficheClient') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -193,6 +202,8 @@ export default function Dashboard() {
                     setNewProduct({ ...newProduct, image: data.url });
                 } else if (type === 'editProduct') {
                     setEditingProduct({ ...editingProduct, image: data.url });
+                } else if (type === 'ficheClient') {
+                    setSelectedClientForFiche({ ...selectedClientForFiche, image: data.url });
                 }
             } else {
                 alert('Upload failed');
@@ -324,7 +335,14 @@ export default function Dashboard() {
         setIsRevenueModalOpen(false);
         setIsAgendaModalOpen(false);
         setIsEditClientModalOpen(false);
+        setIsFicheModalOpen(false);
         setBookingService(null);
+        setSelectedClientForFiche(null);
+    };
+
+    const handleLogout = async () => {
+        localStorage.clear();
+        await signOut({ callbackUrl: '/' });
     };
 
     useEffect(() => {
@@ -386,7 +404,8 @@ export default function Dashboard() {
                             ...(user?.role === 'admin' ? [{ id: 'caisse', icon: <DollarSign size={22} />, label: 'Caisse' }] : []),
                             { id: 'history', icon: <Clock size={22} />, label: t('history') },
                             { id: 'maintenant', icon: <Sparkles size={22} />, label: t('maintenant') },
-                            { id: 'products', icon: <Gift size={22} />, label: t('products') }
+                            { id: 'products', icon: <Gift size={22} />, label: t('products') },
+                            ...(user?.role !== 'admin' ? [{ id: 'fiche', icon: <ClipboardList size={22} />, label: 'Ma Fiche' }] : []),
                         ].map((item) => (
                             <button
                                 key={item.id}
@@ -461,7 +480,7 @@ export default function Dashboard() {
                             </button>
                         )}
 
-                        <button className={styles.logoutBtn} onClick={() => window.location.href = '/'}>
+                        <button className={styles.logoutBtn} onClick={handleLogout}>
                             <LogOut size={20} />
                             <span>{t('signOut')}</span>
                         </button>
@@ -481,7 +500,8 @@ export default function Dashboard() {
                             { id: 'caisse', icon: <DollarSign size={22} />, label: 'Caisse' }
                         ] : []),
                         { id: 'providers', icon: <Users size={22} />, label: t('specialists') },
-                        { id: 'history', icon: <Clock size={22} />, label: t('history') }
+                        { id: 'history', icon: <Clock size={22} />, label: t('history') },
+                        ...(user?.role !== 'admin' ? [{ id: 'fiche', icon: <ClipboardList size={22} />, label: 'Fiche' }] : []),
                     ].map((item) => (
                         <button
                             key={item.id}
@@ -1006,7 +1026,7 @@ export default function Dashboard() {
                                                         <span className={styles.staffRole}>{staff.role}</span>
                                                         <h3>{staff.name}</h3>
                                                         <p>{staff.specialty}</p>
-                                                        <div className={styles.staffActions}>
+                                                        <div className={styles.staffActions} style={{ gap: '10px' }}>
                                                             <button
                                                                 className={styles.iconBtn}
                                                                 onClick={(e) => {
@@ -1017,6 +1037,19 @@ export default function Dashboard() {
                                                             >
                                                                 <Star size={20} />
                                                             </button>
+                                                            {user?.role === 'admin' && (
+                                                                <button
+                                                                    className={styles.iconBtn}
+                                                                    style={{ background: 'rgba(223, 185, 109, 0.1)' }}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setSelectedSpecialistForHistorique({ ...staff });
+                                                                        setIsHistoriqueModalOpen(true);
+                                                                    }}
+                                                                >
+                                                                    <Clock size={20} color="var(--accent)" />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1208,6 +1241,30 @@ export default function Dashboard() {
                             </motion.div>
                         )}
 
+                        {activeTab === 'fiche' && user?.role !== 'admin' && (
+                            <motion.div
+                                key="fiche"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                className={styles.tabContent}
+                            >
+                                <FicheClientTab
+                                    client={(() => {
+                                        const c = data?.clients?.find((c: any) => c.id === user?.id);
+                                        return c || { ...user };
+                                    })()}
+                                    prestataires={prestataires}
+                                    services={services}
+                                    updateUser={updateUser}
+                                    handleFileUpload={handleFileUpload}
+                                    isUploading={isUploading}
+                                    t={t}
+                                    styles={styles}
+                                />
+                            </motion.div>
+                        )}
+
                         {activeTab === 'clients' && user?.role === 'admin' && (
                             <motion.div
                                 key="clients"
@@ -1228,10 +1285,21 @@ export default function Dashboard() {
                                                     key={client.id}
                                                     className={`${styles.clientCard} ${openDropdownId === client.id ? styles.clientCardActive : ''}`}
                                                 >
-                                                    <div className={styles.clientIcon}>
-                                                        <Users size={20} />
+                                                    <div className={styles.clientIcon} style={{ overflow: 'hidden', width: '45px', height: '45px', border: '1px solid rgba(223, 185, 109, 0.2)' }}>
+                                                        {client.image ? (
+                                                            <img src={client.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <Users size={20} />
+                                                        )}
                                                     </div>
-                                                    <div className={styles.clientInfo}>
+                                                    <div
+                                                        className={styles.clientInfo}
+                                                        style={{ cursor: 'pointer' }}
+                                                        onClick={() => {
+                                                            setSelectedClientForFiche({ ...client });
+                                                            setIsFicheModalOpen(true);
+                                                        }}
+                                                    >
                                                         <h4>{client.name}</h4>
                                                         <p>{client.email}</p>
                                                     </div>
@@ -1321,6 +1389,16 @@ export default function Dashboard() {
                                                                 )}
                                                             </AnimatePresence>
                                                         </div>
+                                                        <button
+                                                            className={styles.btnCancel}
+                                                            style={{ padding: '8px 20px', fontSize: '0.75rem', minWidth: '80px', height: 'auto', border: '1px solid var(--accent)' }}
+                                                            onClick={() => {
+                                                                setSelectedClientForFiche({ ...client });
+                                                                setIsFicheModalOpen(true);
+                                                            }}
+                                                        >
+                                                            {t('ficheClient')}
+                                                        </button>
                                                         <button
                                                             className={styles.btnSaveLux}
                                                             style={{ padding: '8px 20px', fontSize: '0.75rem', minWidth: '100px' }}
@@ -1500,7 +1578,7 @@ export default function Dashboard() {
                 {/* Booking Modal */}
                 <AnimatePresence>
                     {isBookingModalOpen && (
-                        <div className={styles.modalOverlay} onClick={closeAllModals}>
+                        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0, y: 50 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -1513,7 +1591,7 @@ export default function Dashboard() {
                                     <button className={styles.closeModal} onClick={() => setIsBookingModalOpen(false)}>×</button>
                                 </div>
 
-                                <div className={styles.modalBody} style={{ padding: '0 20px' }}>
+                                <div className={styles.modalBody}>
                                     <h4 style={{ marginBottom: '10px' }}>{bookingService?.name}</h4>
                                     <p className="text-gold" style={{ marginBottom: '20px' }}>{bookingService?.price} DT • {bookingService?.duration}</p>
 
@@ -1608,7 +1686,7 @@ export default function Dashboard() {
                                     )}
 
                                     <label className={styles.pickerLabel}>{t('selectSpecialist')}</label>
-                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '20px' }}>
+                                    <div className={styles.specialistGrid}>
                                         {prestataires.map((p: any) => (
                                             <div
                                                 key={p.id}
@@ -1916,9 +1994,18 @@ export default function Dashboard() {
                                             <span>Action</span>
                                         </div>
                                         {data?.clients?.map((client: any) => (
-                                            <div key={client.id} className={styles.tableRow} style={{ gridTemplateColumns: '1.5fr 1.5fr 0.8fr 1fr' }} onClick={() => setSelectedClientForDetails(client)}>
+                                            <div key={client.id} className={styles.tableRow} style={{ gridTemplateColumns: '1.5fr 1.5fr 0.8fr 1fr' }} onClick={() => {
+                                                setSelectedClientForFiche({ ...client });
+                                                setIsFicheModalOpen(true);
+                                            }}>
                                                 <div className={styles.tableName}>
-                                                    <div className={styles.avatarMini}>{client.name ? client.name[0] : 'U'}</div>
+                                                    <div className={styles.avatarMini} style={{ overflow: 'hidden' }}>
+                                                        {client.image ? (
+                                                            <img src={client.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                        ) : (
+                                                            client.name ? client.name[0] : 'U'
+                                                        )}
+                                                    </div>
                                                     <span>{client.name || 'Unknown User'}</span>
                                                 </div>
                                                 <span style={{ opacity: 0.7, fontSize: '0.85rem' }}>{client.email}</span>
@@ -2252,7 +2339,7 @@ export default function Dashboard() {
                 {/* Edit & Action Modals (Placed at the end for correct layering) */}
                 <AnimatePresence>
                     {isEditClientModalOpen && editingClient && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsEditClientModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -2339,7 +2426,7 @@ export default function Dashboard() {
 
                     {/* Edit Service Modal */}
                     {isEditServiceModalOpen && editingService && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsEditServiceModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -2451,7 +2538,7 @@ export default function Dashboard() {
 
                     {/* Add Product Modal */}
                     {isAddProductModalOpen && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsAddProductModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -2550,7 +2637,7 @@ export default function Dashboard() {
 
                     {/* Edit Product Modal */}
                     {isEditProductModalOpen && editingProduct && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsEditProductModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -2640,6 +2727,210 @@ export default function Dashboard() {
                                             } catch (e) {
                                                 console.error(e);
                                                 Swal.fire({ title: 'Erreur', text: 'Erreur lors de la mise à jour du produit', icon: 'error', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
+                                            }
+                                        }}>{t('save')}</button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                    {/* Fiche Client Modal starts here */}
+                    {isFicheModalOpen && selectedClientForFiche && (
+                        <div className={styles.modalOverlay} style={{ zIndex: 1100 }} onClick={(e) => e.target === e.currentTarget && setIsFicheModalOpen(false)}>
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0, y: 30 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.9, opacity: 0, y: 30 }}
+                                className={styles.modal}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className={styles.modalHeader}>
+                                    <div className={styles.statIconLux} style={{ background: 'rgba(223, 185, 109, 0.15)', width: '60px', height: '60px', position: 'relative', overflow: 'hidden', cursor: 'pointer' }} onClick={() => document.getElementById('fiche-client-upload')?.click()}>
+                                        {selectedClientForFiche.image ? (
+                                            <img src={selectedClientForFiche.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                        ) : (
+                                            <UserCheck color="var(--accent)" size={24} />
+                                        )}
+                                        {isUploading && (
+                                            <div className={styles.uploadLoading} style={{ background: 'rgba(0,0,0,0.4)' }}>
+                                                <Loader2 className="animate-spin text-white" size={20} />
+                                            </div>
+                                        )}
+                                        <div className={styles.uploadOverlay} style={{ opacity: 0 }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0'}>
+                                            <Upload color="white" size={16} />
+                                        </div>
+                                    </div>
+                                    <input
+                                        id="fiche-client-upload"
+                                        type="file"
+                                        accept="image/*"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => handleFileUpload(e, 'ficheClient')}
+                                    />
+                                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, marginLeft: '15px' }}>
+                                        <h3 style={{ margin: 0 }}>{t('ficheClient')}</h3>
+                                        <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>{selectedClientForFiche.name}</span>
+                                    </div>
+                                    <button onClick={() => setIsFicheModalOpen(false)} className={styles.closeBtn}>×</button>
+                                </div>
+                                <div className={styles.modalBody}>
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('hairColorPref')}</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="Blond polaire, Châtain doré..."
+                                                value={selectedClientForFiche.hair_color_pref || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, hair_color_pref: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Coupe favorite</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="Carré plongeant, Dégradé..."
+                                                value={selectedClientForFiche.favorite_coupe || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, favorite_coupe: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Couleur faux ongles</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="Rose nude, Rouge cerise..."
+                                                value={selectedClientForFiche.nail_color_pref || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, nail_color_pref: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Type de peau</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="Normale, Sèche, Mixte..."
+                                                value={selectedClientForFiche.skin_type || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, skin_type: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Musique préférée</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="Jazz, Lounge, Nature..."
+                                                value={selectedClientForFiche.music_pref || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, music_pref: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Boisson favorite</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="Thé vert, Eau infusée..."
+                                                value={selectedClientForFiche.drink_pref || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, drink_pref: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('coffeePref')}</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="Espresso, Cappuccino..."
+                                                value={selectedClientForFiche.coffee_pref || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, coffee_pref: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('employeePref')}</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="Elena Rodriguez..."
+                                                value={selectedClientForFiche.employee_pref || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, employee_pref: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Téléphone</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="+216 XX XXX XXX"
+                                                value={selectedClientForFiche.phone || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, phone: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Date de naissance</label>
+                                            <input type="date" className={styles.luxuryInput}
+                                                value={selectedClientForFiche.birthday || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, birthday: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                                            <label>{t('allergies')}</label>
+                                            <input type="text" className={styles.luxuryInput} placeholder="Allergie aux huiles, latex..."
+                                                value={selectedClientForFiche.allergies || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, allergies: e.target.value })} />
+                                        </div>
+                                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                                            <label>{t('lastVisitNotes')}</label>
+                                            <textarea className={`${styles.luxuryInput} ${styles.textArea}`} placeholder="Notes sur la dernière visite..."
+                                                value={selectedClientForFiche.last_visit_notes || ''}
+                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, last_visit_notes: e.target.value })}
+                                                style={{ minHeight: '80px' }} />
+                                        </div>
+                                    </div>
+                                    <div className={styles.modalActions}>
+                                        <button className={styles.btnCancel} onClick={() => setIsFicheModalOpen(false)}>{t('cancel')}</button>
+                                        <button className={styles.btnSaveLux} onClick={async () => {
+                                            try {
+                                                await updateUser({
+                                                    variables: {
+                                                        userId: selectedClientForFiche.id,
+                                                        hair_color_pref: selectedClientForFiche.hair_color_pref,
+                                                        favorite_coupe: selectedClientForFiche.favorite_coupe,
+                                                        nail_color_pref: selectedClientForFiche.nail_color_pref,
+                                                        skin_type: selectedClientForFiche.skin_type,
+                                                        music_pref: selectedClientForFiche.music_pref,
+                                                        drink_pref: selectedClientForFiche.drink_pref,
+                                                        coffee_pref: selectedClientForFiche.coffee_pref,
+                                                        employee_pref: selectedClientForFiche.employee_pref,
+                                                        favourite_service: selectedClientForFiche.favourite_service,
+                                                        allergies: selectedClientForFiche.allergies,
+                                                        last_visit_notes: selectedClientForFiche.last_visit_notes,
+                                                        birthday: selectedClientForFiche.birthday,
+                                                        phone: selectedClientForFiche.phone,
+                                                        image: selectedClientForFiche.image
+                                                    }
+                                                });
+                                                Swal.fire({ title: t('success'), text: 'Fiche client mise à jour !', icon: 'success', confirmButtonColor: '#DFB96D' });
+                                                setIsFicheModalOpen(false);
+                                            } catch (e) {
+                                                console.error(e);
+                                                Swal.fire({ title: t('error'), text: 'Une erreur est survenue.', icon: 'error' });
+                                            }
+                                        }}>{t('save')}</button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+
+                    {/* Specialist Historique Modal */}
+                    {isHistoriqueModalOpen && selectedSpecialistForHistorique && (
+                        <div className={styles.modalOverlay} style={{ zIndex: 1100 }} onClick={(e) => e.target === e.currentTarget && setIsHistoriqueModalOpen(false)}>
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0, y: 30 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.9, opacity: 0, y: 30 }}
+                                className={styles.modal}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className={styles.modalHeader}>
+                                    <div className={styles.statIconLux} style={{ background: 'rgba(223, 185, 109, 0.15)', width: '45px', height: '45px' }}>
+                                        <Clock color="var(--accent)" size={20} />
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', flex: 1, marginLeft: '15px' }}>
+                                        <h3 style={{ margin: 0 }}>Historique Spécialiste</h3>
+                                        <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>{selectedSpecialistForHistorique.name}</span>
+                                    </div>
+                                    <button onClick={() => setIsHistoriqueModalOpen(false)} className={styles.closeBtn}>×</button>
+                                </div>
+                                <div className={styles.modalBody}>
+                                    <div className={styles.inputGroup} style={{ marginTop: '10px' }}>
+                                        <label>Notes & Historique de Travail</label>
+                                        <textarea
+                                            className={`${styles.luxuryInput} ${styles.textArea}`}
+                                            placeholder="Saisissez l'historique de travail, les records de performance, etc..."
+                                            value={selectedSpecialistForHistorique.historique || ''}
+                                            onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, historique: e.target.value })}
+                                            style={{ minHeight: '250px' }}
+                                        />
+                                    </div>
+                                    <div className={styles.modalActions} style={{ marginTop: '30px' }}>
+                                        <button className={styles.btnCancel} onClick={() => setIsHistoriqueModalOpen(false)}>{t('cancel')}</button>
+                                        <button className={styles.btnSaveLux} onClick={async () => {
+                                            try {
+                                                await updateSpecialist({
+                                                    variables: {
+                                                        id: selectedSpecialistForHistorique.id,
+                                                        historique: selectedSpecialistForHistorique.historique
+                                                    }
+                                                });
+                                                Swal.fire({ title: t('success'), text: 'Historique mis à jour !', icon: 'success', confirmButtonColor: '#DFB96D' });
+                                                setIsHistoriqueModalOpen(false);
+                                            } catch (e) {
+                                                console.error(e);
+                                                Swal.fire({ title: t('error'), text: 'Une erreur est survenue.', icon: 'error' });
                                             }
                                         }}>{t('save')}</button>
                                     </div>
