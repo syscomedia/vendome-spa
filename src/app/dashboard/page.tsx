@@ -1857,9 +1857,13 @@ export default function Dashboard() {
                                                 whileTap={{ scale: 0.9 }}
                                                 className={styles.starBtn}
                                                 onClick={() => setRating(star)}
-                                                style={{ color: star <= rating ? '#DFB96D' : 'rgba(255,255,255,0.2)' }}
+                                                style={{ color: star <= rating ? '#DFB96D' : 'rgba(223, 185, 109, 0.4)' }}
                                             >
-                                                <Star size={32} fill={star <= rating ? '#DFB96D' : 'none'} />
+                                                <Star 
+                                                    size={32} 
+                                                    fill={star <= rating ? '#DFB96D' : 'none'} 
+                                                    strokeWidth={2}
+                                                />
                                             </motion.button>
                                         ))}
                                     </div>
