@@ -128,14 +128,7 @@ export const ADD_SERVICE_MUTATION = gql`
   }
 `;
 
-export const ADD_PRESTATAIRE_MUTATION = gql`
-  mutation AddPrestataire($name: String!, $role: String!, $image: String!, $rating: Float!, $specialty: String!) {
-    addPrestataire(name: $name, role: $role, image: $image, rating: $rating, specialty: $specialty) {
-      id
-      name
-    }
-  }
-`;
+
 
 export const UPDATE_USER_MUTATION = gql`
   mutation UpdateUser(
@@ -221,6 +214,19 @@ export const UPDATE_SPECIALIST_MUTATION = gql`
       rating
       specialty
       historique
+    }
+  }
+`;
+
+export const ADD_PRESTATAIRE_MUTATION = gql`
+  mutation AddPrestataire($name: String!, $role: String!, $image: String!, $rating: Float!, $specialty: String!) {
+    addPrestataire(name: $name, role: $role, image: $image, rating: $rating, specialty: $specialty) {
+      id
+      name
+      role
+      image
+      rating
+      specialty
     }
   }
 `;

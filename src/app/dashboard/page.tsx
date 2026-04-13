@@ -6,6 +6,7 @@ import LoadingScreen from '@/components/LoadingScreen';
 import FicheClientTab from '@/components/FicheClientTab';
 import AdminInbox from '@/components/AdminInbox';
 import ChatWindow from '@/components/ChatWindow';
+import DayMonthPicker from '@/components/DayMonthPicker';
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { useLanguage } from '@/lib/LanguageContext';
@@ -67,7 +68,9 @@ import {
     UPDATE_PRODUCT_MUTATION,
     REMOVE_PRODUCT_MUTATION,
     UPDATE_RESERVATION_STATUS_MUTATION,
-    UPDATE_SPECIALIST_MUTATION
+    UPDATE_SPECIALIST_MUTATION,
+    REGISTER_MUTATION,
+    ADD_PRESTATAIRE_MUTATION
 } from '@/graphql/mutations';
 import { signOut } from 'next-auth/react';
 
@@ -133,6 +136,8 @@ export default function Dashboard() {
     const [removeProduct] = useMutation(REMOVE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [updateReservationStatus] = useMutation(UPDATE_RESERVATION_STATUS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [updateSpecialist] = useMutation(UPDATE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [registerClient] = useMutation(REGISTER_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [addSpecialist] = useMutation(ADD_PRESTATAIRE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
 
     const router = useRouter();
     const [activeTab, setActiveTab] = useState('overview');
@@ -158,6 +163,8 @@ export default function Dashboard() {
     const [editingClient, setEditingClient] = useState<any>(null);
     const [isEditServiceModalOpen, setIsEditServiceModalOpen] = useState(false);
     const [editingService, setEditingService] = useState<any>(null);
+    const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
+    const [newClient, setNewClient] = useState({ name: '', email: '', password: '', role: 'client', tier: 'Normal', phone: '', birthday: '' });
     const [isClientsModalOpen, setIsClientsModalOpen] = useState(false);
     const [isSpecialistsModalOpen, setIsSpecialistsModalOpen] = useState(false);
     const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
@@ -173,6 +180,8 @@ export default function Dashboard() {
     const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', image: '' });
     const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
+    const [isAddSpecialistModalOpen, setIsAddSpecialistModalOpen] = useState(false);
+    const [newSpecialist, setNewSpecialist] = useState({ name: '', role: '', specialty: '', image: '', rating: 5.0 });
     const [editingProduct, setEditingProduct] = useState<any>(null);
     const [isFicheModalOpen, setIsFicheModalOpen] = useState(false);
     const [selectedClientForFiche, setSelectedClientForFiche] = useState<any>(null);
@@ -1049,9 +1058,17 @@ export default function Dashboard() {
                                 className={styles.tabContent}
                             >
                                 <section className={styles.section}>
-                                    <div className={styles.sectionHeader}>
-                                        <h2>{t('specialists')}</h2>
-                                        <div className={styles.headerLine} />
+                                    <div className={styles.sectionHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <h2>{t('specialists')}</h2>
+                                            <div className={styles.headerLine} />
+                                        </div>
+                                        {user?.role === 'admin' && (
+                                            <button className={styles.btnSaveLux} onClick={() => setIsAddSpecialistModalOpen(true)}>
+                                                <Plus size={16} style={{ marginRight: '8px' }} />
+                                                Ajouter Spécialiste
+                                            </button>
+                                        )}
                                     </div>
                                     <div className={styles.staffGrid}>
                                         {prestataires.map((staff: any, idx: number) => (
@@ -1329,9 +1346,14 @@ export default function Dashboard() {
                                 className={styles.tabContent}
                             >
                                 <section className={styles.section}>
-                                    <div className={styles.sectionHeader}>
-                                        <h2>{t('clients')}</h2>
-                                        <div className={styles.headerLine} />
+                                    <div className={styles.sectionHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div>
+                                            <h2>{t('clients')}</h2>
+                                            <div className={styles.headerLine} />
+                                        </div>
+                                        <button className="btn-lux" onClick={() => setIsAddClientModalOpen(true)}>
+                                            <Plus size={18} /> {t('addClient') || 'Ajouter Client'}
+                                        </button>
                                     </div>
                                     <div className={styles.clientsList}>
                                         {data?.clients && data.clients.length > 0 ? (
@@ -2439,6 +2461,282 @@ export default function Dashboard() {
                         </div>
                     )}
 
+                    {isAddClientModalOpen && (
+                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsAddClientModalOpen(false)}>
+                            <motion.div
+                                initial={{ scale: 0.8, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.8, opacity: 0 }}
+                                className={styles.modal}
+                            >
+                                <div className={styles.modalHeader}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '15px' }}>
+                                        <Plus className="text-gold" />
+                                        <h3 style={{ margin: 0 }}>{t('addClient') || 'Ajouter Client'}</h3>
+                                        <div className={styles.headerLine} style={{ width: '60px' }} />
+                                    </div>
+                                    <button className={styles.closeModal} onClick={() => setIsAddClientModalOpen(false)}>×</button>
+                                </div>
+                                <div className={styles.modalBody}>
+                                    <div style={{ display: 'grid', gap: '20px' }}>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('name')}</label>
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                placeholder="Nom complet"
+                                                value={newClient.name}
+                                                onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('email')}</label>
+                                            <input
+                                                type="email"
+                                                className={styles.luxuryInput}
+                                                placeholder="email@example.com"
+                                                value={newClient.email}
+                                                onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('password')}</label>
+                                            <input
+                                                type="password"
+                                                className={styles.luxuryInput}
+                                                placeholder="••••••••"
+                                                value={newClient.password}
+                                                onChange={(e) => setNewClient({ ...newClient, password: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('memberStatus')}</label>
+                                            <select
+                                                className={styles.luxuryInput}
+                                                value={newClient.tier}
+                                                onChange={(e) => setNewClient({ ...newClient, tier: e.target.value })}
+                                                style={{ background: 'var(--primary)', color: 'white' }}
+                                            >
+                                                <option value="Normal">{t('normalMember')}</option>
+                                                <option value="Membre Gold">{t('goldMember')}</option>
+                                            </select>
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('phone') || 'Téléphone'}</label>
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                placeholder="+216 XX XXX XXX"
+                                                value={newClient.phone}
+                                                onChange={(e) => setNewClient({ ...newClient, phone: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('birthday') || 'Date de naissance'}</label>
+                                            <DayMonthPicker
+                                                value={newClient.birthday}
+                                                onChange={(val) => setNewClient({ ...newClient, birthday: val })}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className={styles.modalActions} style={{ marginTop: '40px' }}>
+                                        <button className={styles.btnCancel} onClick={() => setIsAddClientModalOpen(false)}>{t('cancel')}</button>
+                                        <button className={styles.btnSaveLux} onClick={async () => {
+                                            if (!newClient.name || !newClient.email || !newClient.password) {
+                                                Swal.fire({ title: 'Erreur', text: 'Veuillez remplir tous les champs obligatoires', icon: 'error', confirmButtonColor: '#DFB96D' });
+                                                return;
+                                            }
+                                            try {
+                                                const { data: regData }: any = await registerClient({
+                                                    variables: {
+                                                        name: newClient.name,
+                                                        email: newClient.email,
+                                                        password: newClient.password
+                                                    }
+                                                });
+
+                                                if (regData?.register?.error) {
+                                                    Swal.fire({ title: 'Erreur', text: regData.register.error, icon: 'error', confirmButtonColor: '#DFB96D' });
+                                                    return;
+                                                }
+
+                                                // If extra fields are provided, update the user
+                                                if ((newClient.tier !== 'Normal' || newClient.phone || newClient.birthday) && regData?.register?.user?.id) {
+                                                    await updateUser({
+                                                        variables: {
+                                                            userId: regData.register.user.id,
+                                                            tier: newClient.tier,
+                                                            phone: newClient.phone,
+                                                            birthday: newClient.birthday
+                                                        }
+                                                    });
+                                                }
+
+                                                Swal.fire({ title: 'Succès', text: 'Client ajouté avec succès !', icon: 'success', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
+                                                setIsAddClientModalOpen(false);
+                                                setNewClient({ name: '', email: '', password: '', role: 'client', tier: 'Normal', phone: '', birthday: '' });
+                                            } catch (e) {
+                                                console.error(e);
+                                                Swal.fire({ title: 'Erreur', text: 'Erreur lors de l\'ajout du client', icon: 'error', confirmButtonColor: '#DFB96D' });
+                                            }
+                                        }}>{t('add') || 'Ajouter'}</button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+
+                    {isAddSpecialistModalOpen && (
+                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsAddSpecialistModalOpen(false)}>
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                                className={styles.modal}
+                                style={{ maxWidth: '600px', width: '90%', background: '#F8F5F0' }}
+                            >
+                                <div className={styles.modalHeader}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <div className={styles.statIconLux} style={{ background: 'rgba(223, 185, 109, 0.1)', width: '40px', height: '40px' }}>
+                                            <Sparkles className="text-gold" size={20} />
+                                        </div>
+                                        <h3 style={{ margin: 0 }}>Ajouter un Spécialiste</h3>
+                                    </div>
+                                    <button className={styles.closeModal} onClick={() => setIsAddSpecialistModalOpen(false)}>×</button>
+                                </div>
+
+                                <div className={styles.modalBody} style={{ padding: '30px' }}>
+                                    <div className={styles.luxuryFormGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                                            <label>Nom Complet</label>
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                placeholder="ex: Elena Rodriguez"
+                                                value={newSpecialist.name}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, name: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Titre / Rôle</label>
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                placeholder="ex: Maître Esthéticienne"
+                                                value={newSpecialist.role}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, role: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Spécialité</label>
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                placeholder="ex: HydraFacial & Anti-Âge"
+                                                value={newSpecialist.specialty}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, specialty: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                                            <label>Photo du Spécialiste</label>
+                                            <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '10px' }}>
+                                                <div 
+                                                    style={{ 
+                                                        width: '100px', 
+                                                        height: '100px', 
+                                                        borderRadius: '15px', 
+                                                        background: '#fff', 
+                                                        border: '2px dashed rgba(223, 185, 109, 0.3)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        overflow: 'hidden',
+                                                        flexShrink: 0
+                                                    }}
+                                                >
+                                                    {newSpecialist.image ? (
+                                                        <img src={newSpecialist.image} alt="Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                    ) : (
+                                                        <Upload color="#DFB96D" size={24} />
+                                                    )}
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <input
+                                                        type="file"
+                                                        accept="image/*"
+                                                        onChange={async (e) => {
+                                                            const file = e.target.files?.[0];
+                                                            if (file) {
+                                                                const reader = new FileReader();
+                                                                reader.onloadend = () => {
+                                                                    setNewSpecialist({ ...newSpecialist, image: reader.result as string });
+                                                                };
+                                                                reader.readAsDataURL(file);
+                                                            }
+                                                        }}
+                                                        style={{ display: 'none' }}
+                                                        id="specialist-image-upload"
+                                                    />
+                                                    <label 
+                                                        htmlFor="specialist-image-upload" 
+                                                        className={styles.btnSaveLux}
+                                                        style={{ display: 'inline-flex', padding: '10px 20px', fontSize: '0.85rem', cursor: 'pointer' }}
+                                                    >
+                                                        {newSpecialist.image ? 'Changer la photo' : 'Choisir une photo'}
+                                                    </label>
+                                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '8px' }}>
+                                                        Format recommandé : Carré, max 2Mo
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Note Initiale (0-5)</label>
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                min="0"
+                                                max="5"
+                                                className={styles.luxuryInput}
+                                                value={newSpecialist.rating}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, rating: parseFloat(e.target.value) })}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className={styles.modalActions} style={{ padding: '20px 30px', background: 'rgba(223, 185, 109, 0.05)', display: 'flex', justifyContent: 'flex-end', gap: '15px' }}>
+                                    <button className={styles.btnCancel} onClick={() => setIsAddSpecialistModalOpen(false)}>{t('cancel')}</button>
+                                    <button className={styles.btnSaveLux} onClick={async () => {
+                                        if (!newSpecialist.name || !newSpecialist.role) {
+                                            Swal.fire({ title: 'Attention', text: 'Le nom et le rôle sont obligatoires.', icon: 'warning', confirmButtonColor: '#DFB96D' });
+                                            return;
+                                        }
+                                        try {
+                                            await addSpecialist({
+                                                variables: {
+                                                    name: newSpecialist.name,
+                                                    role: newSpecialist.role,
+                                                    specialty: newSpecialist.specialty,
+                                                    image: newSpecialist.image || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=200&auto=format&fit=crop',
+                                                    rating: newSpecialist.rating
+                                                }
+                                            });
+                                            Swal.fire({ title: 'Succès', text: 'Spécialiste ajouté avec succès !', icon: 'success', confirmButtonColor: '#DFB96D' });
+                                            setIsAddSpecialistModalOpen(false);
+                                            setNewSpecialist({ name: '', role: '', specialty: '', image: '', rating: 5.0 });
+                                        } catch (e) {
+                                            console.error(e);
+                                            Swal.fire({ title: 'Erreur', text: 'Erreur lors de l\'ajout du spécialiste', icon: 'error', confirmButtonColor: '#DFB96D' });
+                                        }
+                                    }}>
+                                        Ajouter Spécialiste
+                                    </button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+
                     {/* Edit Service Modal */}
                     {isEditServiceModalOpen && editingService && (
                         <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsEditServiceModalOpen(false)}>
@@ -2846,9 +3144,9 @@ export default function Dashboard() {
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>Date de naissance</label>
-                                            <input type="date" className={styles.luxuryInput}
+                                            <DayMonthPicker
                                                 value={selectedClientForFiche.birthday || ''}
-                                                onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, birthday: e.target.value })} />
+                                                onChange={(val) => setSelectedClientForFiche({ ...selectedClientForFiche, birthday: val })} />
                                         </div>
                                         <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
                                             <label>{t('allergies')}</label>

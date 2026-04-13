@@ -171,7 +171,11 @@ export const TRANSLATIONS = {
         employeePref: "Employé préféré",
         favouriteService: "Service préféré",
         allergies: "Allergies / Particularités",
-        lastVisitNotes: "Notes de la dernière visite"
+        lastVisitNotes: "Notes de la dernière visite",
+        addClient: "Ajouter Client",
+        add: "Ajouter",
+        phone: "Téléphone",
+        birthday: "Date de naissance"
     },
     ar: {
         welcome: "مرحباً بكم في فاندوم",

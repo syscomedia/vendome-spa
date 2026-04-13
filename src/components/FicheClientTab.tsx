@@ -9,6 +9,7 @@ import {
     Droplets, Camera, Link2, Play
 } from 'lucide-react';
 import Swal from 'sweetalert2';
+import DayMonthPicker from './DayMonthPicker';
 
 interface FicheClientTabProps {
     client: any;
@@ -198,17 +199,7 @@ export default function FicheClientTab({
                                 <span className={styles.ficheStatVal}>{completionPct}%</span>
                                 <span className={styles.ficheStatLabel}>Complété</span>
                             </div>
-                            {fiche.birthday && (
-                                <>
-                                    <div className={styles.ficheStatDivider} />
-                                    <div className={styles.ficheStat}>
-                                        <span className={styles.ficheStatVal}>
-                                            {new Date().getFullYear() - new Date(fiche.birthday).getFullYear()}
-                                        </span>
-                                        <span className={styles.ficheStatLabel}>Ans</span>
-                                    </div>
-                                </>
-                            )}
+
                         </div>
                     </div>
                 </div>
@@ -541,8 +532,11 @@ export default function FicheClientTab({
                                 </div>
                                 <div className={styles.ficheInfoField}>
                                     <label className={styles.ficheInfoLabel}><Calendar size={13} /> Date de naissance</label>
-                                    <input type="date" className={styles.ficheInput}
-                                        value={fiche.birthday || ''} onChange={e => update('birthday', e.target.value)} />
+                                    <DayMonthPicker 
+                                        value={fiche.birthday || ''} 
+                                        onChange={(val) => update('birthday', val)} 
+                                        className={styles.ficheInput}
+                                    />
                                 </div>
                             </div>
                         </div>
