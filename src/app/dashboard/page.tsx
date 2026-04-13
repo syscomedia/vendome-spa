@@ -137,7 +137,6 @@ export default function Dashboard() {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState('overview');
     const [selectedStaff, setSelectedStaff] = useState<string | null>(null);
-    const [comment, setComment] = useState('');
     const [waitingComment, setWaitingComment] = useState('');
     const [cart, setCart] = useState<any[]>([]);
     const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
@@ -1146,7 +1145,10 @@ export default function Dashboard() {
                                                     <div style={{ display: 'flex', gap: '15px' }}>
                                                         <button
                                                             className={styles.addCommentLink}
-                                                            onClick={() => setSelectedStaff(staff?.id || null)}
+                                                            onClick={() => {
+                                                                setSelectedStaff(staff?.id || null);
+                                                                setIsRatingModalOpen(true);
+                                                            }}
                                                         >
                                                             <MessageSquare size={16} /> {t('addComment')}
                                                         </button>
@@ -1569,64 +1571,6 @@ export default function Dashboard() {
                     </AnimatePresence>
                 </div>
 
-                {/* Extraordinary Modal */}
-                <AnimatePresence>
-                    {selectedStaff && (
-                        <div className={styles.modalOverlay}>
-                            <motion.div
-                                initial={{ scale: 0.8, opacity: 0, y: 50 }}
-                                animate={{ scale: 1, opacity: 1, y: 0 }}
-                                exit={{ scale: 0.8, opacity: 0, y: 50 }}
-                                className={styles.modal}
-                            >
-                                <div className={styles.modalHeader}>
-                                    <Sparkles className="text-gold" />
-                                    <h3>{t('evaluateSpecialist')}</h3>
-                                    <button className={styles.closeModal} onClick={() => setSelectedStaff(null)}>×</button>
-                                </div>
-                                <p className={styles.modalDesc}>{t('howWasSession', { name: prestataires.find((p: any) => p.id === selectedStaff)?.name })}</p>
-
-                                <div className={styles.starRating}>
-                                    {[1, 2, 3, 4, 5].map((star) => (
-                                        <motion.button
-                                            key={star}
-                                            whileHover={{ scale: 1.2 }}
-                                            whileTap={{ scale: 0.9 }}
-                                            onClick={() => setRating(star)}
-                                            className={styles.starBtn}
-                                        >
-                                            <Star
-                                                size={32}
-                                                fill={rating >= star ? "#DFB96D" : "none"}
-                                                color={rating >= star ? "#DFB96D" : "rgba(255,255,255,0.2)"}
-                                            />
-                                        </motion.button>
-                                    ))}
-                                </div>
-
-                                <textarea
-                                    placeholder={t('shareExperience')}
-                                    value={comment}
-                                    onChange={(e) => setComment(e.target.value)}
-                                    className={styles.modalTextarea}
-                                />
-                                <div className={styles.modalActions}>
-                                    <button className={styles.btnCancel} onClick={() => {
-                                        setSelectedStaff(null);
-                                        setRating(0);
-                                        setComment('');
-                                    }}>{t('dismiss')}</button>
-                                    <button className={styles.btnSaveLux} onClick={() => {
-                                        alert(t('thankYouReview', { rating }));
-                                        setSelectedStaff(null);
-                                        setRating(0);
-                                        setComment('');
-                                    }}>{t('shareFeedback')}</button>
-                                </div>
-                            </motion.div>
-                        </div>
-                    )}
-                </AnimatePresence>
 
                 {/* Booking Modal */}
                 <AnimatePresence>
@@ -1888,27 +1832,35 @@ export default function Dashboard() {
                     {isRatingModalOpen && (
                         <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
                             <motion.div
-                                initial={{ scale: 0.8, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0.8, opacity: 0 }}
+                                initial={{ scale: 0.8, opacity: 0, y: 50 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.8, opacity: 0, y: 50 }}
                                 className={styles.modal}
                             >
                                 <div className={styles.modalHeader}>
-                                    <Star className="text-gold" />
+                                    <Sparkles className="text-gold" />
                                     <h3>{t('evaluateSpecialist')}</h3>
-                                    <button className={styles.closeModal} onClick={() => setIsRatingModalOpen(false)}>×</button>
+                                    <button className={styles.closeModal} onClick={() => {
+                                        setIsRatingModalOpen(false);
+                                        setSelectedStaff(null);
+                                    }}>×</button>
                                 </div>
                                 <div className={styles.modalBody}>
+                                    <p className={styles.modalDesc}>
+                                        {t('howWasSession', { name: prestataires.find((p: any) => p.id === selectedStaff)?.name || '' })}
+                                    </p>
                                     <div className={styles.starRating}>
                                         {[1, 2, 3, 4, 5].map((star) => (
-                                            <button
+                                            <motion.button
                                                 key={star}
+                                                whileHover={{ scale: 1.2 }}
+                                                whileTap={{ scale: 0.9 }}
                                                 className={styles.starBtn}
                                                 onClick={() => setRating(star)}
-                                                style={{ color: star <= rating ? '#DFB96D' : '#ddd' }}
+                                                style={{ color: star <= rating ? '#DFB96D' : 'rgba(255,255,255,0.2)' }}
                                             >
                                                 <Star size={32} fill={star <= rating ? '#DFB96D' : 'none'} />
-                                            </button>
+                                            </motion.button>
                                         ))}
                                     </div>
                                     <textarea
@@ -1918,7 +1870,12 @@ export default function Dashboard() {
                                         onChange={(e) => setWaitingComment(e.target.value)}
                                     />
                                     <div className={styles.modalActions}>
-                                        <button className={styles.btnCancel} onClick={() => setIsRatingModalOpen(false)}>{t('cancel')}</button>
+                                        <button className={styles.btnCancel} onClick={() => {
+                                            setIsRatingModalOpen(false);
+                                            setSelectedStaff(null);
+                                            setRating(0);
+                                            setWaitingComment('');
+                                        }}>{t('dismiss')}</button>
                                         <button className={styles.btnSaveLux} onClick={async () => {
                                             if (!selectedStaff) return;
                                             try {
@@ -1932,13 +1889,14 @@ export default function Dashboard() {
                                                 });
                                                 Swal.fire({ title: t('success'), text: t('evalSaved'), icon: 'success', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
                                                 setIsRatingModalOpen(false);
+                                                setSelectedStaff(null);
                                                 setRating(0);
                                                 setWaitingComment('');
                                             } catch (e) {
                                                 console.error(e);
                                                 Swal.fire({ title: t('error'), text: t('evalFailed'), icon: 'error', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
                                             }
-                                        }}>{t('saveEvaluation')}</button>
+                                        }}>{t('shareFeedback')}</button>
                                     </div>
                                 </div>
                             </motion.div>
