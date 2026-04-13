@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import LoadingScreen from '@/components/LoadingScreen';
 import FicheClientTab from '@/components/FicheClientTab';
+import AdminInbox from '@/components/AdminInbox';
+import ChatWindow from '@/components/ChatWindow';
 import Swal from 'sweetalert2';
 import { motion, AnimatePresence, useScroll, useTransform } from 'framer-motion';
 import { useLanguage } from '@/lib/LanguageContext';
@@ -177,6 +179,11 @@ export default function Dashboard() {
     const [selectedClientForFiche, setSelectedClientForFiche] = useState<any>(null);
     const [isHistoriqueModalOpen, setIsHistoriqueModalOpen] = useState(false);
     const [selectedSpecialistForHistorique, setSelectedSpecialistForHistorique] = useState<any>(null);
+    const [isAdminInboxOpen, setIsAdminInboxOpen] = useState(false);
+    const [isClientChatOpen, setIsClientChatOpen] = useState(false);
+    const [chatUnreadCount, setChatUnreadCount] = useState(0);
+    const [adminUnreadCount, setAdminUnreadCount] = useState(0);
+    const chatSseRef = useRef<EventSource | null>(null);
     const { t, language, setLanguage } = useLanguage();
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct' | 'ficheClient') => {
@@ -360,6 +367,40 @@ export default function Dashboard() {
             setUser(JSON.parse(storedUser));
         }
     }, []);
+
+    // SSE: real-time unread message badges
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const isAdmin = user?.role === 'admin';
+        const role = isAdmin ? 'admin' : 'client';
+
+        // Fetch initial unread count
+        fetch(`/api/chat/unread?userId=${user.id}`)
+            .then(r => r.json())
+            .then(d => {
+                if (isAdmin) setAdminUnreadCount(d.count || 0);
+                else setChatUnreadCount(d.count || 0);
+            })
+            .catch(() => {});
+
+        const es = new EventSource(`/api/chat/sse?userId=${user.id}&role=${role}`);
+        chatSseRef.current = es;
+        es.onmessage = (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                if (data.type === 'new_message' && data.message?.sender_id !== Number(user.id)) {
+                    if (isAdmin) {
+                        setAdminUnreadCount(prev => prev + 1);
+                    } else {
+                        setChatUnreadCount(prev => prev + 1);
+                    }
+                }
+            } catch {}
+        };
+        es.onerror = () => es.close();
+        return () => { es.close(); chatSseRef.current = null; };
+    }, [user?.id, user?.role]);
 
 
 
@@ -636,17 +677,29 @@ export default function Dashboard() {
                                             <motion.div
                                                 whileHover={{ y: -10 }}
                                                 className={styles.statCardLux}
+                                                onClick={() => { setIsAdminInboxOpen(true); setAdminUnreadCount(0); }}
+                                                style={{ cursor: 'pointer' }}
                                             >
-                                                <div className={styles.statIconLux} style={{ background: 'rgba(10, 10, 255, 0.1)' }}>
-                                                    <MessageSquare color="#0A0AFF" size={28} />
+                                                <div className={styles.statIconLux} style={{ background: adminUnreadCount > 0 ? 'rgba(239,68,68,0.1)' : 'rgba(10, 10, 255, 0.1)', position: 'relative' }}>
+                                                    <MessageSquare color={adminUnreadCount > 0 ? '#ef4444' : '#0A0AFF'} size={28} />
+                                                    {adminUnreadCount > 0 && (
+                                                        <span style={{
+                                                            position: 'absolute', top: -6, right: -6,
+                                                            background: '#ef4444', color: 'white',
+                                                            borderRadius: '999px', fontSize: '0.65rem',
+                                                            fontWeight: 700, padding: '1px 5px',
+                                                            border: '2px solid white', minWidth: 18,
+                                                            textAlign: 'center', lineHeight: '16px'
+                                                        }}>{adminUnreadCount}</span>
+                                                    )}
                                                 </div>
                                                 <div className={styles.statInfoLux}>
-                                                    <span className={styles.statValueLux}>
-                                                        {waitingData?.waitingComments?.length || 0}
+                                                    <span className={styles.statValueLux} style={{ color: adminUnreadCount > 0 ? '#ef4444' : undefined }}>
+                                                        {adminUnreadCount}
                                                     </span>
-                                                    <span className={styles.statLabelLux}>{t('activeFeedback')}</span>
+                                                    <span className={styles.statLabelLux}>MESSAGES NON LUS</span>
                                                     <div className={styles.statTrendLux} style={{ color: '#0A0AFF' }}>
-                                                        <Clock size={14} /> <span>{t('recentVisits')}</span>
+                                                        <MessageSquare size={14} /> <span>Ouvrir la messagerie</span>
                                                     </div>
                                                 </div>
                                                 <Activity className={styles.statGraphIcon} size={60} style={{ color: '#0A0AFF' }} />
@@ -2940,6 +2993,61 @@ export default function Dashboard() {
                     )}
                 </AnimatePresence>
             </main >
+
+            {/* ── ADMIN INBOX MODAL ── */}
+            <AnimatePresence>
+                {isAdminInboxOpen && user?.role === 'admin' && (
+                    <AdminInbox
+                        adminId={Number(user.id)}
+                        adminName={user.name || 'Admin'}
+                        onClose={() => {
+                            setIsAdminInboxOpen(false);
+                            // Re-fetch accurate unread count after closing inbox
+                            fetch(`/api/chat/unread?userId=${user.id}`)
+                                .then(r => r.json())
+                                .then(d => setAdminUnreadCount(d.count || 0))
+                                .catch(() => {});
+                        }}
+                        styles={styles}
+                    />
+                )}
+            </AnimatePresence>
+
+            {/* ── CLIENT FLOATING CHAT BUTTON + WINDOW ── */}
+            {user?.role !== 'admin' && (
+                <>
+                    <AnimatePresence>
+                        {isClientChatOpen && (
+                            <ChatWindow
+                                currentUserId={Number(user.id)}
+                                currentUserRole={user.role || 'client'}
+                                currentUserName={user.name || 'Client'}
+                                otherUserId={1}
+                                otherUserName="Vendôme Spa"
+                                adminId={1}
+                                onClose={() => { setIsClientChatOpen(false); setChatUnreadCount(0); }}
+                                onUnreadChange={setChatUnreadCount}
+                                styles={styles}
+                            />
+                        )}
+                    </AnimatePresence>
+
+                    <motion.button
+                        className={styles.chatFloatBtn}
+                        onClick={() => { setIsClientChatOpen(v => !v); if (!isClientChatOpen) setChatUnreadCount(0); }}
+                        whileHover={{ scale: 1.08 }}
+                        whileTap={{ scale: 0.95 }}
+                        initial={{ opacity: 0, scale: 0 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: 1, type: 'spring' }}
+                    >
+                        <MessageSquare size={22} />
+                        {chatUnreadCount > 0 && (
+                            <span className={styles.chatFloatBadge}>{chatUnreadCount}</span>
+                        )}
+                    </motion.button>
+                </>
+            )}
         </div >
     );
 }
