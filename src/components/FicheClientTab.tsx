@@ -177,7 +177,22 @@ export default function FicheClientTab({
                         </div>
                         <div className={styles.ficheAvatarCam}><Camera size={13} /></div>
                         <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-                            onChange={(e) => handleFileUpload(e, 'ficheClient')} />
+                            onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+
+                                if (file.size > 2 * 1024 * 1024) {
+                                    Swal.fire({ title: 'Fichier trop volumineux', text: 'Veuillez choisir une image de moins de 2 Mo.', icon: 'warning', confirmButtonColor: '#DFB96D' });
+                                    return;
+                                }
+
+                                const reader = new FileReader();
+                                reader.onloadend = () => {
+                                    const base64String = reader.result as string;
+                                    setFiche((prev: any) => ({ ...prev, image: base64String }));
+                                };
+                                reader.readAsDataURL(file);
+                            }} />
                     </div>
 
                     {/* Identity */}

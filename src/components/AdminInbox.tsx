@@ -21,6 +21,7 @@ interface AdminInboxProps {
     adminName: string;
     onClose: () => void;
     styles: any;
+    initialChatUser?: Conversation | null;
 }
 
 const TIER_COLORS: Record<string, string> = {
@@ -28,11 +29,11 @@ const TIER_COLORS: Record<string, string> = {
     Platinum: '#B2EBF2', Diamond: '#CE93D8',
 };
 
-export default function AdminInbox({ adminId, adminName, onClose, styles }: AdminInboxProps) {
+export default function AdminInbox({ adminId, adminName, onClose, styles, initialChatUser = null }: AdminInboxProps) {
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
-    const [activeChatUser, setActiveChatUser] = useState<Conversation | null>(null);
+    const [activeChatUser, setActiveChatUser] = useState<Conversation | null>(initialChatUser);
     const [totalUnread, setTotalUnread] = useState(0);
     const eventSourceRef = useRef<EventSource | null>(null);
 

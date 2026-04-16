@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import LoadingScreen from '@/components/LoadingScreen';
 import FicheClientTab from '@/components/FicheClientTab';
+import NotesTab from '@/components/NotesTab';
 import AdminInbox from '@/components/AdminInbox';
 import ChatWindow from '@/components/ChatWindow';
 import DayMonthPicker from '@/components/DayMonthPicker';
@@ -45,11 +46,18 @@ import {
     BarChart3,
     Activity,
     Search,
-    Plus
+    Plus,
+    Mail,
+    Camera,
+    Banknote,
+    Ticket,
+    CreditCard,
+    Percent,
+    PenLine
 } from 'lucide-react';
 
 import { useQuery, useMutation } from '@apollo/client/react';
-import { GET_DASHBOARD_DATA, GET_PRODUCTS, GET_WAITING_DATA, GET_ALL_FEEDBACK } from '@/graphql/queries';
+import { GET_DASHBOARD_DATA, GET_PRODUCTS, GET_WAITING_DATA, GET_ALL_FEEDBACK, GET_CLIENT_NOTES } from '@/graphql/queries';
 import {
     CREATE_RESERVATION_MUTATION,
     ADD_WAITING_COMMENT_MUTATION,
@@ -70,7 +78,8 @@ import {
     UPDATE_RESERVATION_STATUS_MUTATION,
     UPDATE_SPECIALIST_MUTATION,
     REGISTER_MUTATION,
-    ADD_PRESTATAIRE_MUTATION
+    ADD_PRESTATAIRE_MUTATION,
+    ADD_CLIENT_NOTE_MUTATION
 } from '@/graphql/mutations';
 import { signOut } from 'next-auth/react';
 
@@ -107,7 +116,9 @@ export default function Dashboard() {
     const [mounted, setMounted] = useState(false);
     const [user, setUser] = useState<any>(null);
 
-    const { data, loading, error } = useQuery<DashboardData>(GET_DASHBOARD_DATA);
+    const { data, loading, error } = useQuery<DashboardData>(GET_DASHBOARD_DATA, {
+        variables: { userId: user?.id }
+    });
     const { data: productsData } = useQuery<ProductsData>(GET_PRODUCTS);
     const { data: waitingData } = useQuery<WaitingData>(GET_WAITING_DATA, {
         variables: { userId: user?.id }
@@ -157,6 +168,9 @@ export default function Dashboard() {
     const [bookingService, setBookingService] = useState<any>(null);
     const [bookingDate, setBookingDate] = useState('');
     const [bookingStaff, setBookingStaff] = useState('');
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [selectedReservationForPayment, setSelectedReservationForPayment] = useState<any>(null);
+    const [paymentModeLine, setPaymentModeLine] = useState('');
     const [isAddServiceModalOpen, setIsAddServiceModalOpen] = useState(false);
     const [newService, setNewService] = useState({ name: '', description: '', price: '', image: '', duration: '' });
     const [isEditClientModalOpen, setIsEditClientModalOpen] = useState(false);
@@ -164,7 +178,7 @@ export default function Dashboard() {
     const [isEditServiceModalOpen, setIsEditServiceModalOpen] = useState(false);
     const [editingService, setEditingService] = useState<any>(null);
     const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
-    const [newClient, setNewClient] = useState({ name: '', email: '', password: '', role: 'client', tier: 'Normal', phone: '', birthday: '' });
+    const [newClient, setNewClient] = useState({ name: '', email: '', password: '', role: 'client', tier: 'Normal', phone: '', birthday: '', image: '' });
     const [isClientsModalOpen, setIsClientsModalOpen] = useState(false);
     const [isSpecialistsModalOpen, setIsSpecialistsModalOpen] = useState(false);
     const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
@@ -188,47 +202,52 @@ export default function Dashboard() {
     const [isHistoriqueModalOpen, setIsHistoriqueModalOpen] = useState(false);
     const [selectedSpecialistForHistorique, setSelectedSpecialistForHistorique] = useState<any>(null);
     const [isAdminInboxOpen, setIsAdminInboxOpen] = useState(false);
+    const [initialChatUserForInbox, setInitialChatUserForInbox] = useState<any>(null);
     const [isClientChatOpen, setIsClientChatOpen] = useState(false);
     const [chatUnreadCount, setChatUnreadCount] = useState(0);
     const [adminUnreadCount, setAdminUnreadCount] = useState(0);
     const chatSseRef = useRef<EventSource | null>(null);
     const { t, language, setLanguage } = useLanguage();
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct' | 'ficheClient') => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct' | 'ficheClient' | 'newClient' | 'editClient') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
-        setIsUploading(true);
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const res = await fetch('/api/upload', {
-                method: 'POST',
-                body: formData,
-            });
-            const data = await res.json();
-            if (data.success) {
-                if (type === 'new') {
-                    setNewService({ ...newService, image: data.url });
-                } else if (type === 'edit') {
-                    setEditingService({ ...editingService, image: data.url });
-                } else if (type === 'newProduct') {
-                    setNewProduct({ ...newProduct, image: data.url });
-                } else if (type === 'editProduct') {
-                    setEditingProduct({ ...editingProduct, image: data.url });
-                } else if (type === 'ficheClient') {
-                    setSelectedClientForFiche({ ...selectedClientForFiche, image: data.url });
-                }
-            } else {
-                alert('Upload failed');
-            }
-        } catch (error) {
-            console.error(error);
-            alert('Error uploading file');
-        } finally {
-            setIsUploading(false);
+        // Check file size (optional but recommended for base64 in DB)
+        if (file.size > 2 * 1024 * 1024) {
+            Swal.fire({ title: 'Fichier trop volumineux', text: 'Veuillez choisir une image de moins de 2 Mo.', icon: 'warning', confirmButtonColor: '#DFB96D' });
+            return;
         }
+
+        setIsUploading(true);
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            
+            if (type === 'new') {
+                setNewService({ ...newService, image: base64String });
+            } else if (type === 'edit') {
+                setEditingService({ ...editingService, image: base64String });
+            } else if (type === 'newProduct') {
+                setNewProduct({ ...newProduct, image: base64String });
+            } else if (type === 'editProduct') {
+                setEditingProduct({ ...editingProduct, image: base64String });
+            } else if (type === 'ficheClient') {
+                setSelectedClientForFiche({ ...selectedClientForFiche, image: base64String });
+            } else if (type === 'newClient') {
+                setNewClient({ ...newClient, image: base64String });
+            } else if (type === 'editClient') {
+                setEditingClient({ ...editingClient, image: base64String });
+            }
+            setIsUploading(false);
+        };
+        reader.onerror = () => {
+            console.error('FileReader error');
+            alert('Error reading file');
+            setIsUploading(false);
+        };
+        reader.readAsDataURL(file);
     };
 
     const getClientMonthlyPayments = (clientId: string) => {
@@ -293,6 +312,39 @@ export default function Dashboard() {
                 d.getMonth() === now.getMonth() &&
                 d.getFullYear() === now.getFullYear();
         }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    };
+
+    const getUpcomingBirthdays = () => {
+        if (!data?.clients) return [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        return data.clients.filter((client: any) => {
+            if (!client.birthday) return false;
+            const bdayDate = new Date(client.birthday);
+            if (isNaN(bdayDate.getTime())) return false;
+
+            const thisYearBday = new Date(today.getFullYear(), bdayDate.getMonth(), bdayDate.getDate());
+            if (thisYearBday < today) {
+                thisYearBday.setFullYear(today.getFullYear() + 1);
+            }
+
+            const diffTime = thisYearBday.getTime() - today.getTime();
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            return diffDays >= 0 && diffDays <= 3;
+        }).sort((a: any, b: any) => {
+            const bdayA = new Date(a.birthday);
+            const bdayB = new Date(b.birthday);
+            
+            const nextA = new Date(today.getFullYear(), bdayA.getMonth(), bdayA.getDate());
+            if (nextA < today) nextA.setFullYear(today.getFullYear() + 1);
+            
+            const nextB = new Date(today.getFullYear(), bdayB.getMonth(), bdayB.getDate());
+            if (nextB < today) nextB.setFullYear(today.getFullYear() + 1);
+            
+            return nextA.getTime() - nextB.getTime();
+        });
     };
 
     const getStaffRevenueReport = () => {
@@ -447,14 +499,18 @@ export default function Dashboard() {
                             ...(user?.role === 'admin' ? [
                                 { id: 'manage_services', icon: <Layers size={22} />, label: t('manageServices') },
                                 { id: 'clients', icon: <Users size={22} />, label: t('clients') },
-                                { id: 'feedback', icon: <Star size={22} />, label: t('feedback') }
+                                { id: 'feedback', icon: <Star size={22} />, label: t('feedback') },
+                                { id: 'notes', icon: <PenLine size={22} />, label: 'Notes Client' }
                             ] : []),
                             { id: 'providers', icon: <Users size={22} />, label: t('specialists') },
                             ...(user?.role === 'admin' ? [{ id: 'caisse', icon: <DollarSign size={22} />, label: 'Caisse' }] : []),
                             { id: 'history', icon: <Clock size={22} />, label: t('history') },
                             { id: 'maintenant', icon: <Sparkles size={22} />, label: t('maintenant') },
                             { id: 'products', icon: <Gift size={22} />, label: t('products') },
-                            ...(user?.role !== 'admin' ? [{ id: 'fiche', icon: <ClipboardList size={22} />, label: 'Ma Fiche' }] : []),
+                            ...(user?.role !== 'admin' ? [
+                                { id: 'fiche', icon: <ClipboardList size={22} />, label: 'Ma Fiche' },
+                                { id: 'notes', icon: <PenLine size={22} />, label: 'Mes Notes' }
+                            ] : []),
                         ].map((item) => (
                             <button
                                 key={item.id}
@@ -546,11 +602,15 @@ export default function Dashboard() {
                             { id: 'manage_services', icon: <Layers size={22} />, label: t('manageServices') },
                             { id: 'clients', icon: <Users size={22} />, label: t('clients') },
                             { id: 'feedback', icon: <Star size={22} />, label: t('feedback') },
+                            { id: 'notes', icon: <PenLine size={22} />, label: 'Notes Client' },
                             { id: 'caisse', icon: <DollarSign size={22} />, label: 'Caisse' }
                         ] : []),
                         { id: 'providers', icon: <Users size={22} />, label: t('specialists') },
                         { id: 'history', icon: <Clock size={22} />, label: t('history') },
-                        ...(user?.role !== 'admin' ? [{ id: 'fiche', icon: <ClipboardList size={22} />, label: 'Fiche' }] : []),
+                        ...(user?.role !== 'admin' ? [
+                            { id: 'fiche', icon: <ClipboardList size={22} />, label: 'Fiche' },
+                            { id: 'notes', icon: <PenLine size={22} />, label: 'Mes Notes' }
+                        ] : []),
                     ].map((item) => (
                         <button
                             key={item.id}
@@ -821,50 +881,50 @@ export default function Dashboard() {
 
                                             <div className={styles.intelCard} style={{ background: 'linear-gradient(135deg, #1A130F 0%, #2A1F18 100%)', color: 'white' }}>
                                                 <div className={styles.intelHeader}>
-                                                    <Sparkles size={20} color="var(--accent)" />
-                                                    <h3 style={{ color: 'white' }}>AI Business Health</h3>
+                                                    <Gift size={20} color="var(--accent)" />
+                                                    <h3 style={{ color: 'white' }}>Les Anniversaires</h3>
                                                 </div>
-                                                <div className={styles.aiInsights}>
-                                                    <div className={styles.aiItem}>
-                                                        <Clock size={16} color="var(--accent)" />
-                                                        <div>
-                                                            <p>Heure de pointe aujourd'hui</p>
-                                                            <strong>{getPeakHours()}</strong>
+                                                <div className={styles.intelList}>
+                                                    {getUpcomingBirthdays().map((client: any) => (
+                                                        <div key={client.id} className={styles.intelItem} style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                                                            <div className={styles.avatarMini}>{client.name ? client.name[0] : 'U'}</div>
+                                                            <div className={styles.intelDetails}>
+                                                                <strong style={{ color: 'white' }}>{client.name}</strong>
+                                                                <span style={{ color: 'rgba(255,255,255,0.5)' }}>{client.email}</span>
+                                                                <div className={styles.birthdayDate}>
+                                                                    🎂 {new Date(client.birthday).toLocaleDateString(language, { day: 'numeric', month: 'long' })}
+                                                                </div>
+                                                            </div>
+                                                            <div className={styles.birthdayActions}>
+                                                                <button 
+                                                                    className={styles.actionBtn}
+                                                                    onClick={() => {
+                                                                        setInitialChatUserForInbox({
+                                                                            id: Number(client.id),
+                                                                            name: client.name,
+                                                                            email: client.email,
+                                                                            image: client.image,
+                                                                            tier: client.tier
+                                                                        });
+                                                                        setIsAdminInboxOpen(true);
+                                                                    }}
+                                                                    title="Envoyer un message"
+                                                                >
+                                                                    <MessageSquare size={16} />
+                                                                </button>
+                                                                <a 
+                                                                    href={`mailto:${client.email}?subject=Joyeux Anniversaire !&body=Toute l'équipe de Vendôme Spa vous souhaite un excellent anniversaire !`} 
+                                                                    className={styles.actionBtn}
+                                                                    title="Envoyer un email"
+                                                                >
+                                                                    <Mail size={16} />
+                                                                </a>
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                    <div className={styles.aiItem}>
-                                                        <Star size={16} color="var(--accent)" />
-                                                        <div>
-                                                            <p>Score de satisfaction Spa</p>
-                                                            <strong>9.8 / 10</strong>
-                                                        </div>
-                                                    </div>
-                                                    <div className={styles.aiItem}>
-                                                        <Activity size={16} color="var(--accent)" />
-                                                        <div>
-                                                            <p>Taux d'occupation</p>
-                                                            <strong>{(() => {
-                                                                const now = new Date();
-                                                                const todaysRes = data?.allReservations?.filter((r: any) => {
-                                                                    if (!r.date) return false;
-                                                                    const d = new Date(r.date);
-                                                                    return d.getDate() === now.getDate() &&
-                                                                        d.getMonth() === now.getMonth() &&
-                                                                        d.getFullYear() === now.getFullYear();
-                                                                }) || [];
-                                                                return Math.min(100, Math.round((todaysRes.length / 8) * 100));
-                                                            })()}%</strong>
-                                                        </div>
-                                                    </div>
-                                                </div>
-
-                                                <div className={styles.aiRecommendations}>
-                                                    <h4>💡 Intelligence Proactive</h4>
-                                                    <ul>
-                                                        <li>Forte demande sur <strong>{Object.keys(data?.allReservations?.reduce((acc: any, r: any) => { if (r.service?.name) acc[r.service.name] = (acc[r.service.name] || 0) + 1; return acc; }, {}) || {}).sort((a, b) => (data?.allReservations?.filter((r: any) => r.service?.name === b).length || 0) - (data?.allReservations?.filter((r: any) => r.service?.name === a).length || 0))[0] || 'vos services'}</strong>. Pensez à ajuster le planning.</li>
-                                                        <li>Le créneau de <strong>{getPeakHours()}</strong> est saturé cette semaine.</li>
-                                                        <li>3 clients VIP n'ont pas réservé depuis 1 mois. Relancez-les ?</li>
-                                                    </ul>
+                                                    ))}
+                                                    {getUpcomingBirthdays().length === 0 && (
+                                                        <p className={styles.emptyIntel} style={{ color: 'rgba(255,255,255,0.4)' }}>Aucun anniversaire dans les 3 prochains jours.</p>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -1337,6 +1397,18 @@ export default function Dashboard() {
                             </motion.div>
                         )}
 
+                        {activeTab === 'notes' && (
+                            <motion.div
+                                key="notes"
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0, y: -20 }}
+                                className={styles.tabContent}
+                            >
+                                <NotesTab user={user} styles={styles} t={t} />
+                            </motion.div>
+                        )}
+
                         {activeTab === 'clients' && user?.role === 'admin' && (
                             <motion.div
                                 key="clients"
@@ -1467,6 +1539,34 @@ export default function Dashboard() {
                                                             </AnimatePresence>
                                                         </div>
                                                         <button
+                                                            className={styles.btnSaveLux}
+                                                            style={{ 
+                                                                padding: '8px 20px', 
+                                                                fontSize: '0.75rem', 
+                                                                minWidth: '120px', 
+                                                                background: 'rgba(223, 185, 109, 0.1)', 
+                                                                color: 'var(--accent)',
+                                                                border: '1px solid rgba(223, 185, 109, 0.3)',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                justifyContent: 'center',
+                                                                gap: '8px'
+                                                            }}
+                                                            onClick={() => {
+                                                                setInitialChatUserForInbox({
+                                                                    id: Number(client.id),
+                                                                    name: client.name,
+                                                                    email: client.email,
+                                                                    image: client.image,
+                                                                    tier: client.tier
+                                                                });
+                                                                setIsAdminInboxOpen(true);
+                                                            }}
+                                                        >
+                                                            <MessageSquare size={14} />
+                                                            MESSAGERIE
+                                                        </button>
+                                                        <button
                                                             className={styles.btnCancel}
                                                             style={{ padding: '8px 20px', fontSize: '0.75rem', minWidth: '80px', height: 'auto', border: '1px solid var(--accent)' }}
                                                             onClick={() => {
@@ -1550,10 +1650,9 @@ export default function Dashboard() {
                                                         <button
                                                             className={styles.btnSaveLux}
                                                             style={{ padding: '10px 25px', fontSize: '0.75rem' }}
-                                                            onClick={async () => {
-                                                                if (confirm(`Confirmer le règlement de ${res.service?.price} DT par ${res.user?.name}?`)) {
-                                                                    await updateReservationStatus({ variables: { id: res.id, status: 'paid' } });
-                                                                }
+                                                            onClick={() => {
+                                                                setSelectedReservationForPayment(res);
+                                                                setIsPaymentModalOpen(true);
                                                             }}
                                                         >
                                                             Payer
@@ -2392,6 +2491,48 @@ export default function Dashboard() {
                                     <button className={styles.closeModal} onClick={() => setIsEditClientModalOpen(false)}>×</button>
                                 </div>
                                 <div className={styles.modalBody}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '25px' }}>
+                                        <div 
+                                            className={styles.statIconLux} 
+                                            style={{ 
+                                                width: '100px', 
+                                                height: '100px', 
+                                                position: 'relative', 
+                                                overflow: 'hidden', 
+                                                cursor: 'pointer', 
+                                                borderRadius: '50%',
+                                                border: '2px solid var(--accent)',
+                                                background: 'rgba(223, 185, 109, 0.05)'
+                                            }}
+                                            onClick={() => document.getElementById('edit-client-upload')?.click()}
+                                        >
+                                            {editingClient.image ? (
+                                                <img src={editingClient.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : (
+                                                <Users color="var(--accent)" size={40} />
+                                            )}
+                                            <div style={{ 
+                                                position: 'absolute', 
+                                                bottom: 0, 
+                                                width: '100%', 
+                                                background: 'rgba(26, 15, 10, 0.6)', 
+                                                padding: '4px 0',
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                alignItems: 'center'
+                                            }}>
+                                                <Camera color="white" size={14} />
+                                            </div>
+                                        </div>
+                                        <input
+                                            id="edit-client-upload"
+                                            type="file"
+                                            accept="image/*"
+                                            style={{ display: 'none' }}
+                                            onChange={(e) => handleFileUpload(e, 'editClient')}
+                                        />
+                                        <p style={{ fontSize: '0.75rem', marginTop: '8px', opacity: 0.6 }}>{t('changePhoto') || 'Changer la photo'}</p>
+                                    </div>
                                     <div style={{ display: 'grid', gap: '20px' }}>
                                         <div className={styles.inputGroup}>
                                             <label>{t('name')}</label>
@@ -2442,7 +2583,8 @@ export default function Dashboard() {
                                                     name: editingClient.name,
                                                     email: editingClient.email,
                                                     role: editingClient.role,
-                                                    tier: editingClient.tier
+                                                    tier: editingClient.tier,
+                                                    image: editingClient.image
                                                 };
                                                 if (editingClient.password) {
                                                     vars.password = editingClient.password;
@@ -2478,6 +2620,48 @@ export default function Dashboard() {
                                     <button className={styles.closeModal} onClick={() => setIsAddClientModalOpen(false)}>×</button>
                                 </div>
                                 <div className={styles.modalBody}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '25px' }}>
+                                        <div 
+                                            className={styles.statIconLux} 
+                                            style={{ 
+                                                width: '100px', 
+                                                height: '100px', 
+                                                position: 'relative', 
+                                                overflow: 'hidden', 
+                                                cursor: 'pointer', 
+                                                borderRadius: '50%',
+                                                border: '2px solid var(--accent)',
+                                                background: 'rgba(223, 185, 109, 0.05)'
+                                            }}
+                                            onClick={() => document.getElementById('new-client-upload')?.click()}
+                                        >
+                                            {newClient.image ? (
+                                                <img src={newClient.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                            ) : (
+                                                <Users color="var(--accent)" size={40} />
+                                            )}
+                                            <div style={{ 
+                                                position: 'absolute', 
+                                                bottom: 0, 
+                                                width: '100%', 
+                                                background: 'rgba(26, 15, 10, 0.6)', 
+                                                padding: '4px 0',
+                                                display: 'flex',
+                                                justifyContent: 'center',
+                                                alignItems: 'center'
+                                            }}>
+                                                <Camera color="white" size={14} />
+                                            </div>
+                                        </div>
+                                        <input
+                                            id="new-client-upload"
+                                            type="file"
+                                            accept="image/*"
+                                            style={{ display: 'none' }}
+                                            onChange={(e) => handleFileUpload(e, 'newClient')}
+                                        />
+                                        <p style={{ fontSize: '0.75rem', marginTop: '8px', opacity: 0.6 }}>{t('uploadPhoto') || 'Télécharger une photo'}</p>
+                                    </div>
                                     <div style={{ display: 'grid', gap: '20px' }}>
                                         <div className={styles.inputGroup}>
                                             <label>{t('name')}</label>
@@ -2561,20 +2745,21 @@ export default function Dashboard() {
                                                 }
 
                                                 // If extra fields are provided, update the user
-                                                if ((newClient.tier !== 'Normal' || newClient.phone || newClient.birthday) && regData?.register?.user?.id) {
+                                                if ((newClient.tier !== 'Normal' || newClient.phone || newClient.birthday || newClient.image) && regData?.register?.user?.id) {
                                                     await updateUser({
                                                         variables: {
                                                             userId: regData.register.user.id,
                                                             tier: newClient.tier,
                                                             phone: newClient.phone,
-                                                            birthday: newClient.birthday
+                                                            birthday: newClient.birthday,
+                                                            image: newClient.image
                                                         }
                                                     });
                                                 }
 
                                                 Swal.fire({ title: 'Succès', text: 'Client ajouté avec succès !', icon: 'success', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
                                                 setIsAddClientModalOpen(false);
-                                                setNewClient({ name: '', email: '', password: '', role: 'client', tier: 'Normal', phone: '', birthday: '' });
+                                                setNewClient({ name: '', email: '', password: '', role: 'client', tier: 'Normal', phone: '', birthday: '', image: '' });
                                             } catch (e) {
                                                 console.error(e);
                                                 Swal.fire({ title: 'Erreur', text: 'Erreur lors de l\'ajout du client', icon: 'error', confirmButtonColor: '#DFB96D' });
@@ -2732,6 +2917,122 @@ export default function Dashboard() {
                                     }}>
                                         Ajouter Spécialiste
                                     </button>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+
+                    {/* Add Service Modal */}
+                    {isAddServiceModalOpen && (
+                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsAddServiceModalOpen(false)}>
+                            <motion.div
+                                initial={{ scale: 0.8, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.8, opacity: 0 }}
+                                className={styles.modal}
+                            >
+                                <div className={styles.modalHeader}>
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '15px' }}>
+                                        <Plus className="text-gold" />
+                                        <h3 style={{ margin: 0 }}>{t('addService') || 'Ajouter un Service'}</h3>
+                                        <div className={styles.headerLine} style={{ width: '60px' }} />
+                                    </div>
+                                    <button className={styles.closeModal} onClick={() => setIsAddServiceModalOpen(false)}>×</button>
+                                </div>
+                                <div className={styles.modalBody}>
+                                    <div style={{ display: 'grid', gap: '20px' }}>
+                                        <div className={styles.uploadContainer}>
+                                            <div className={styles.previewTile} onClick={() => document.getElementById('new-service-upload')?.click()}>
+                                                {newService.image ? (
+                                                    <img src={newService.image} alt="Preview" />
+                                                ) : (
+                                                    <div className={styles.previewPlaceholder}>
+                                                        <Upload className="text-gold" />
+                                                        <span>{t('uploadImage') || 'Télécharger une image'}</span>
+                                                    </div>
+                                                )}
+                                                {isUploading && (
+                                                    <div className={styles.uploadLoading}>
+                                                        <Loader2 className="animate-spin text-gold" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <input
+                                                id="new-service-upload"
+                                                type="file"
+                                                accept="image/*"
+                                                style={{ display: 'none' }}
+                                                onChange={(e) => handleFileUpload(e, 'new')}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('name')}</label>
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                placeholder="Massage Royal"
+                                                value={newService.name}
+                                                onChange={(e) => setNewService({ ...newService, name: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('description')}</label>
+                                            <textarea
+                                                className={`${styles.luxuryInput} ${styles.textArea}`}
+                                                placeholder="Une expérience sensorielle unique..."
+                                                value={newService.description}
+                                                onChange={(e) => setNewService({ ...newService, description: e.target.value })}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                                            <div className={styles.inputGroup}>
+                                                <label>{t('price')} (DT)</label>
+                                                <input
+                                                    type="number"
+                                                    className={styles.luxuryInput}
+                                                    placeholder="120"
+                                                    value={newService.price}
+                                                    onChange={(e) => setNewService({ ...newService, price: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className={styles.inputGroup}>
+                                                <label>{t('duration')}</label>
+                                                <input
+                                                    type="text"
+                                                    className={styles.luxuryInput}
+                                                    placeholder="60 mins"
+                                                    value={newService.duration}
+                                                    onChange={(e) => setNewService({ ...newService, duration: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className={styles.modalActions} style={{ marginTop: '30px' }}>
+                                        <button className={styles.btnCancel} onClick={() => setIsAddServiceModalOpen(false)}>{t('cancel')}</button>
+                                        <button className={styles.btnSaveLux} onClick={async () => {
+                                            if (!newService.name || !newService.price || !newService.image) {
+                                                Swal.fire({ title: 'Attention', text: 'Nom, prix et image sont obligatoires', icon: 'warning', confirmButtonColor: '#DFB96D' });
+                                                return;
+                                            }
+                                            try {
+                                                await addService({
+                                                    variables: {
+                                                        name: newService.name,
+                                                        description: newService.description,
+                                                        price: parseFloat(newService.price),
+                                                        image: newService.image,
+                                                        duration: newService.duration
+                                                    }
+                                                });
+                                                Swal.fire({ title: 'Succès', text: 'Service ajouté avec succès !', icon: 'success', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
+                                                setIsAddServiceModalOpen(false);
+                                                setNewService({ name: '', description: '', price: '', image: '', duration: '' });
+                                            } catch (e) {
+                                                console.error(e);
+                                                Swal.fire({ title: 'Erreur', text: 'Erreur lors de l\'ajout du service', icon: 'error', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
+                                            }
+                                        }}>{t('save')}</button>
+                                    </div>
                                 </div>
                             </motion.div>
                         </div>
@@ -3251,6 +3552,117 @@ export default function Dashboard() {
                             </motion.div>
                         </div>
                     )}
+                    {/* Payment Mode Selection Modal */}
+                    {isPaymentModalOpen && selectedReservationForPayment && (
+                        <div className={styles.modalOverlay} style={{ zIndex: 3000 }} onClick={(e) => e.target === e.currentTarget && setIsPaymentModalOpen(false)}>
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                                animate={{ scale: 1, opacity: 1, y: 0 }}
+                                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                                className={styles.modal}
+                                style={{ maxWidth: '500px', width: '90%', background: '#F8F5F0' }}
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className={styles.modalHeader}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <div className={styles.statIconLux} style={{ background: 'rgba(223, 185, 109, 0.1)', width: '40px', height: '40px' }}>
+                                            <DollarSign className="text-gold" size={20} />
+                                        </div>
+                                        <h3 style={{ margin: 0 }}>Mode de Paiement</h3>
+                                    </div>
+                                    <button className={styles.closeModal} onClick={() => setIsPaymentModalOpen(false)}>×</button>
+                                </div>
+
+                                <div className={styles.modalBody} style={{ padding: '30px' }}>
+                                    <div style={{ textAlign: 'center', marginBottom: '30px' }}>
+                                        <h4 style={{ margin: '0 0 5px 0', fontSize: '1.1rem' }}>{selectedReservationForPayment.user?.name}</h4>
+                                        <p style={{ margin: 0, opacity: 0.7 }}>{selectedReservationForPayment.service?.name}</p>
+                                        <div className="text-gold" style={{ fontSize: '1.5rem', fontWeight: 800, marginTop: '10px' }}>
+                                            {selectedReservationForPayment.service?.price} DT
+                                        </div>
+                                    </div>
+
+                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                                        {[
+                                            { id: 'Espèce', label: 'Espèce', icon: <Banknote size={24} /> },
+                                            { id: 'Chèque', label: 'Chèque', icon: <Ticket size={24} /> },
+                                            { id: 'Carte Bancaire', label: 'Carte Bancaire', icon: <CreditCard size={24} /> },
+                                            { id: 'Chèque Cadeau', label: 'Cadeau', icon: <Gift size={24} /> },
+                                            { id: 'Offre', label: 'Offre', icon: <Percent size={24} /> }
+                                        ].map((mode) => (
+                                            <button
+                                                key={mode.id}
+                                                className={styles.luxuryOptionBtn}
+                                                style={{
+                                                    padding: '20px 10px',
+                                                    borderRadius: '16px',
+                                                    border: paymentModeLine === mode.id ? '2px solid var(--accent)' : '1px solid rgba(0,0,0,0.05)',
+                                                    background: paymentModeLine === mode.id ? 'var(--accent)' : 'white',
+                                                    color: 'var(--primary)',
+                                                    cursor: 'pointer',
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    alignItems: 'center',
+                                                    gap: '12px',
+                                                    boxShadow: paymentModeLine === mode.id ? '0 10px 25px rgba(223, 185, 109, 0.3)' : '0 4px 12px rgba(0,0,0,0.03)',
+                                                    gridColumn: mode.id === 'Offre' ? 'span 2' : 'auto',
+                                                    transition: 'all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1)'
+                                                }}
+                                                onClick={() => setPaymentModeLine(mode.id)}
+                                            >
+                                                <div style={{ opacity: paymentModeLine === mode.id ? 1 : 0.6 }}>{mode.icon}</div>
+                                                <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{mode.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    <div className={styles.modalActions} style={{ marginTop: '40px', background: 'transparent', padding: 0 }}>
+                                        <button className={styles.btnCancel} style={{ flex: 1 }} onClick={() => setIsPaymentModalOpen(false)}>Annuler</button>
+                                        <button 
+                                            className={styles.btnSaveLux} 
+                                            disabled={!paymentModeLine}
+                                            style={{ flex: 2, opacity: !paymentModeLine ? 0.5 : 1 }}
+                                            onClick={async () => {
+                                                if (!paymentModeLine) return;
+                                                try {
+                                                    await updateReservationStatus({ 
+                                                        variables: { 
+                                                            id: selectedReservationForPayment.id, 
+                                                            status: 'paid',
+                                                            paymentMode: paymentModeLine
+                                                        } 
+                                                    });
+                                                    
+                                                    Swal.fire({
+                                                        title: 'Paiement Confirmé',
+                                                        text: `Règlement de ${selectedReservationForPayment.service?.price} DT effectué par ${paymentModeLine}.`,
+                                                        icon: 'success',
+                                                        confirmButtonColor: '#DFB96D',
+                                                        background: '#F8F5F0',
+                                                        timer: 3000
+                                                    });
+                                                    
+                                                    setIsPaymentModalOpen(false);
+                                                    setSelectedReservationForPayment(null);
+                                                    setPaymentModeLine('');
+                                                } catch (e) {
+                                                    console.error(e);
+                                                    Swal.fire({
+                                                        title: 'Erreur',
+                                                        text: 'Impossible d\'enregistrer le paiement.',
+                                                        icon: 'error',
+                                                        confirmButtonColor: '#DFB96D'
+                                                    });
+                                                }
+                                            }}
+                                        >
+                                            Confirmer le Paiement
+                                        </button>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
                 </AnimatePresence>
             </main >
 
@@ -3260,8 +3672,10 @@ export default function Dashboard() {
                     <AdminInbox
                         adminId={Number(user.id)}
                         adminName={user.name || 'Admin'}
+                        initialChatUser={initialChatUserForInbox}
                         onClose={() => {
                             setIsAdminInboxOpen(false);
+                            setInitialChatUserForInbox(null);
                             // Re-fetch accurate unread count after closing inbox
                             fetch(`/api/chat/unread?userId=${user.id}`)
                                 .then(r => r.json())

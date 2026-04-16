@@ -40,10 +40,24 @@ export const resolvers = {
                 return [];
             }
         },
-        userLoyalty: async () => {
+        userLoyalty: async (_: any, { userId }: any) => {
             try {
-                const res = await query('SELECT points, tier, next_reward as "nextReward" FROM user_loyalty LIMIT 1');
-                return res.rows[0] || { points: 0, tier: 'Guest', nextReward: 100 };
+                if (!userId) {
+                    return { points: 0, tier: 'Guest', nextReward: 100 };
+                }
+                const res = await query('SELECT points, tier FROM users WHERE id = $1', [userId]);
+                const user = res.rows[0];
+                if (!user) return { points: 0, tier: 'Guest', nextReward: 100 };
+                
+                const points = parseInt(user.points) || 0;
+                // Calculate next reward: let's say every 500 points
+                const nextRewardValue = 500 - (points % 500);
+
+                return { 
+                    points: points, 
+                    tier: user.tier || 'Guest', 
+                    nextReward: nextRewardValue 
+                };
             } catch (e) {
                 console.error('Error fetching user loyalty:', e);
                 return { points: 0, tier: 'Guest', nextReward: 100 };
@@ -160,6 +174,35 @@ export const resolvers = {
                 return [];
             }
         },
+        clientNotes: async (_: any, { clientId }: any) => {
+            try {
+                let queryText = 'SELECT * FROM client_notes';
+                const values = [];
+                if (clientId) {
+                    queryText += ' WHERE client_id = $1';
+                    values.push(clientId);
+                }
+                queryText += ' ORDER BY created_at DESC';
+                const res = await query(queryText, values);
+                return res.rows.map(row => ({
+                    ...row,
+                    createdAt: row.created_at.toISOString()
+                }));
+            } catch (e) {
+                console.error('Error fetching client notes:', e);
+                return [];
+            }
+        },
+    },
+    ClientNote: {
+        client: async (parent: any) => {
+            const res = await query('SELECT id, email, name, role, image FROM users WHERE id = $1', [parent.client_id]);
+            return res.rows[0];
+        },
+        author: async (parent: any) => {
+            const res = await query('SELECT id, email, name, role, image FROM users WHERE id = $1', [parent.author_id]);
+            return res.rows[0];
+        }
     },
     Mutation: {
         login: async (_: any, { email, password }: any) => {
@@ -572,17 +615,21 @@ export const resolvers = {
                 throw new Error("Failed to update specialist");
             }
         },
-        updateReservationStatus: async (_: any, { id, status }: any) => {
+        updateReservationStatus: async (_: any, { id, status, paymentMode }: any) => {
             try {
-                const res = await query(
-                    'UPDATE reservations SET status = $1 WHERE id = $2 RETURNING id, status',
-                    [status, id]
-                );
-                // Return same structure as other reservations if needed, but for status update we can be minimal
-                // or fetch full record. Let's fetch full record to be consistent.
+                let queryText = 'UPDATE reservations SET status = $1';
+                const values = [status, id];
+                if (paymentMode) {
+                    queryText += ', payment_mode = $3';
+                    values.push(paymentMode);
+                }
+                queryText += ' WHERE id = $2 RETURNING id, status, payment_mode as "paymentMode"';
+                
+                await query(queryText, values);
+                
                 const fullRes = await query(`
                     SELECT 
-                        r.id, r.date, r.status,
+                        r.id, r.date, r.status, r.payment_mode as "paymentMode",
                         json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
                         json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
@@ -598,5 +645,20 @@ export const resolvers = {
                 throw new Error("Failed to update reservation status");
             }
         },
+        addClientNote: async (_: any, { clientId, authorId, content }: any) => {
+            try {
+                const res = await query(
+                    'INSERT INTO client_notes (client_id, author_id, content) VALUES ($1, $2, $3) RETURNING *',
+                    [clientId, authorId, content]
+                );
+                return {
+                    ...res.rows[0],
+                    createdAt: res.rows[0].created_at.toISOString()
+                };
+            } catch (e) {
+                console.error('Error adding client note:', e);
+                throw new Error("Failed to add client note");
+            }
+        }
     },
 };

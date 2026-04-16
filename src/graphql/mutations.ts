@@ -196,10 +196,11 @@ export const REMOVE_PRODUCT_MUTATION = gql`
 `;
 
 export const UPDATE_RESERVATION_STATUS_MUTATION = gql`
-  mutation UpdateReservationStatus($id: ID!, $status: String!) {
-    updateReservationStatus(id: $id, status: $status) {
+  mutation UpdateReservationStatus($id: ID!, $status: String!, $paymentMode: String) {
+    updateReservationStatus(id: $id, status: $status, paymentMode: $paymentMode) {
       id
       status
+      paymentMode
     }
   }
 `;
@@ -227,6 +228,20 @@ export const ADD_PRESTATAIRE_MUTATION = gql`
       image
       rating
       specialty
+    }
+  }
+`;
+
+export const ADD_CLIENT_NOTE_MUTATION = gql`
+  mutation AddClientNote($clientId: ID!, $authorId: ID!, $content: String!) {
+    addClientNote(clientId: $clientId, authorId: $authorId, content: $content) {
+      id
+      content
+      createdAt
+      author {
+        id
+        name
+      }
     }
   }
 `;

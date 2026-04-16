@@ -1,7 +1,7 @@
 import { gql } from '@apollo/client';
 
 export const GET_DASHBOARD_DATA = gql`
-  query GetDashboardData {
+  query GetDashboardData($userId: ID) {
     services {
       id
       name
@@ -24,7 +24,7 @@ export const GET_DASHBOARD_DATA = gql`
       name
       image
     }
-    userLoyalty {
+    userLoyalty(userId: $userId) {
       points
       tier
       nextReward
@@ -180,6 +180,25 @@ export const GET_ALL_FEEDBACK = gql`
       prestataire {
         name
         role
+      }
+    }
+  }
+`;
+
+export const GET_CLIENT_NOTES = gql`
+  query GetClientNotes($clientId: ID) {
+    clientNotes(clientId: $clientId) {
+      id
+      content
+      createdAt
+      author {
+        id
+        name
+        role
+      }
+      client {
+        id
+        name
       }
     }
   }

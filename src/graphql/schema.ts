@@ -89,6 +89,15 @@ export const typeDefs = gql`
     prestataire: Prestataire
     date: String!
     status: String!
+    paymentMode: String
+  }
+
+  type ClientNote {
+    id: ID!
+    client: User!
+    author: User!
+    content: String!
+    createdAt: String!
   }
 
   type WaitingComment {
@@ -103,7 +112,7 @@ export const typeDefs = gql`
     service(id: ID!): Service
     prestataires: [Prestataire!]!
     amenities: [Amenity!]!
-    userLoyalty: UserLoyalty!
+    userLoyalty(userId: ID): UserLoyalty!
     serviceHistory: [ServiceHistory!]!
     recommendations: [Recommendation!]!
     me: User
@@ -112,6 +121,7 @@ export const typeDefs = gql`
     myReservations(userId: ID): [Reservation!]!
     waitingComments: [WaitingComment!]!
     personnelEvaluations: [Evaluation!]!
+    clientNotes(clientId: ID): [ClientNote!]!
   }
 
   type Evaluation {
@@ -145,6 +155,7 @@ export const typeDefs = gql`
     addProduct(name: String!, description: String!, price: Float!, image: String!): Product!
     updateProduct(id: ID!, name: String, description: String, price: Float, image: String): Product!
     removeProduct(id: ID!): Boolean
-    updateReservationStatus(id: ID!, status: String!): Reservation!
+    updateReservationStatus(id: ID!, status: String!, paymentMode: String): Reservation!
+    addClientNote(clientId: ID!, authorId: ID!, content: String!): ClientNote!
   }
 `;

@@ -98,6 +98,8 @@ export const TRANSLATIONS = {
         shareValuableReview: "Partagez votre précieux avis sur la prestation de {name}",
         whatToSayTo: "Que souhaitez-vous dire à {name} ?...",
         publicPrivacyMsg: "Votre avis sera visible publiquement par la communauté Elite.",
+        changePhoto: "Changer la photo",
+        uploadPhoto: "Télécharger une photo",
         editUser: "Modifier l'utilisateur",
         editService: "Modifier le service",
         uploadImage: "Télécharger une image",
