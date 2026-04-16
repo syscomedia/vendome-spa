@@ -16,7 +16,15 @@ export const authOptions: NextAuthOptions = {
         strategy: "jwt",
     },
     callbacks: {
-        async session({ session, token }) {
+        async session({ session }: any) {
+            if (session.user) {
+                const { query } = require("./db");
+                const res = await query("SELECT id, role FROM users WHERE email = $1", [session.user.email]);
+                if (res.rows.length > 0) {
+                    session.user.role = res.rows[0].role;
+                    session.user.id = res.rows[0].id;
+                }
+            }
             return session;
         },
     },

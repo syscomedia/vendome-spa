@@ -79,6 +79,7 @@ import {
     UPDATE_SPECIALIST_MUTATION,
     REGISTER_MUTATION,
     ADD_PRESTATAIRE_MUTATION,
+    DELETE_SPECIALIST_MUTATION,
     ADD_CLIENT_NOTE_MUTATION
 } from '@/graphql/mutations';
 import { signOut } from 'next-auth/react';
@@ -147,6 +148,7 @@ export default function Dashboard() {
     const [removeProduct] = useMutation(REMOVE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [updateReservationStatus] = useMutation(UPDATE_RESERVATION_STATUS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [updateSpecialist] = useMutation(UPDATE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [deleteSpecialist] = useMutation(DELETE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [registerClient] = useMutation(REGISTER_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [addSpecialist] = useMutation(ADD_PRESTATAIRE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
 
@@ -195,7 +197,19 @@ export default function Dashboard() {
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', image: '' });
     const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
     const [isAddSpecialistModalOpen, setIsAddSpecialistModalOpen] = useState(false);
-    const [newSpecialist, setNewSpecialist] = useState({ name: '', role: '', specialty: '', image: '', rating: 5.0 });
+    const [newSpecialist, setNewSpecialist] = useState({ 
+        name: '', 
+        role: '', 
+        specialty: '', 
+        image: '', 
+        rating: 5.0,
+        satisfied_clients: '1.2k',
+        tech_expertise: 95,
+        hosp_expertise: 95,
+        prec_expertise: 95,
+        award_badge: 'Meilleur Spécialiste',
+        historique: ''
+    });
     const [editingProduct, setEditingProduct] = useState<any>(null);
     const [isFicheModalOpen, setIsFicheModalOpen] = useState(false);
     const [selectedClientForFiche, setSelectedClientForFiche] = useState<any>(null);
@@ -1176,7 +1190,38 @@ export default function Dashboard() {
                                                                         setIsHistoriqueModalOpen(true);
                                                                     }}
                                                                 >
-                                                                    <Clock size={20} color="var(--accent)" />
+                                                                    <Edit2 size={18} />
+                                                                </button>
+                                                            )}
+                                                            {user?.role === 'admin' && (
+                                                                <button
+                                                                    className={styles.iconBtn}
+                                                                    style={{ background: 'rgba(239, 68, 68, 0.1)' }}
+                                                                    onClick={async (e) => {
+                                                                        e.stopPropagation();
+                                                                        const result = await Swal.fire({
+                                                                            title: 'Êtes-vous sûr ?',
+                                                                            text: "Vous ne pourrez pas revenir en arrière !",
+                                                                            icon: 'warning',
+                                                                            showCancelButton: true,
+                                                                            confirmButtonColor: '#DFB96D',
+                                                                            cancelButtonColor: '#d33',
+                                                                            confirmButtonText: 'Oui, supprimer !',
+                                                                            cancelButtonText: 'Annuler'
+                                                                        });
+
+                                                                        if (result.isConfirmed) {
+                                                                            try {
+                                                                                await deleteSpecialist({ variables: { id: staff.id } });
+                                                                                Swal.fire('Supprimé !', 'Le spécialiste a été supprimé.', 'success');
+                                                                            } catch (error) {
+                                                                                console.error(error);
+                                                                                Swal.fire('Erreur', "Une erreur est survenue lors de la suppression.", 'error');
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    <Trash2 size={20} color="#dc2626" />
                                                                 </button>
                                                             )}
                                                         </div>
@@ -2883,8 +2928,62 @@ export default function Dashboard() {
                                                 min="0"
                                                 max="5"
                                                 className={styles.luxuryInput}
-                                                value={newSpecialist.rating}
                                                 onChange={(e) => setNewSpecialist({ ...newSpecialist, rating: parseFloat(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Clients Satisfaits (ex: 1.2k)</label>
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                value={newSpecialist.satisfied_clients}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, satisfied_clients: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Badge / Distinction</label>
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                value={newSpecialist.award_badge}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, award_badge: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Expertise Technique (%)</label>
+                                            <input
+                                                type="number"
+                                                className={styles.luxuryInput}
+                                                value={newSpecialist.tech_expertise}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, tech_expertise: parseInt(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Expertise Hospitalité (%)</label>
+                                            <input
+                                                type="number"
+                                                className={styles.luxuryInput}
+                                                value={newSpecialist.hosp_expertise}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, hosp_expertise: parseInt(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Expertise Précision (%)</label>
+                                            <input
+                                                type="number"
+                                                className={styles.luxuryInput}
+                                                value={newSpecialist.prec_expertise}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, prec_expertise: parseInt(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                                            <label>Historique & Biographie</label>
+                                            <textarea
+                                                className={`${styles.luxuryInput} ${styles.textArea}`}
+                                                style={{ minHeight: '100px' }}
+                                                placeholder="Racontez le parcours d'excellence de ce spécialiste..."
+                                                value={newSpecialist.historique}
+                                                onChange={(e) => setNewSpecialist({ ...newSpecialist, historique: e.target.value })}
                                             />
                                         </div>
                                     </div>
@@ -2904,12 +3003,22 @@ export default function Dashboard() {
                                                     role: newSpecialist.role,
                                                     specialty: newSpecialist.specialty,
                                                     image: newSpecialist.image || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=200&auto=format&fit=crop',
-                                                    rating: newSpecialist.rating
+                                                    rating: newSpecialist.rating,
+                                                    satisfied_clients: newSpecialist.satisfied_clients,
+                                                    tech_expertise: newSpecialist.tech_expertise,
+                                                    hosp_expertise: newSpecialist.hosp_expertise,
+                                                    prec_expertise: newSpecialist.prec_expertise,
+                                                    award_badge: newSpecialist.award_badge,
+                                                    historique: newSpecialist.historique
                                                 }
                                             });
                                             Swal.fire({ title: 'Succès', text: 'Spécialiste ajouté avec succès !', icon: 'success', confirmButtonColor: '#DFB96D' });
                                             setIsAddSpecialistModalOpen(false);
-                                            setNewSpecialist({ name: '', role: '', specialty: '', image: '', rating: 5.0 });
+                                            setNewSpecialist({ 
+                                                name: '', role: '', specialty: '', image: '', rating: 5.0,
+                                                satisfied_clients: '1.2k', tech_expertise: 95, hosp_expertise: 95, prec_expertise: 95, award_badge: 'Meilleur Spécialiste',
+                                                historique: ''
+                                            });
                                         } catch (e) {
                                             console.error(e);
                                             Swal.fire({ title: 'Erreur', text: 'Erreur lors de l\'ajout du spécialiste', icon: 'error', confirmButtonColor: '#DFB96D' });
@@ -3511,23 +3620,118 @@ export default function Dashboard() {
                             >
                                 <div className={styles.modalHeader}>
                                     <div className={styles.statIconLux} style={{ background: 'rgba(223, 185, 109, 0.15)', width: '45px', height: '45px' }}>
-                                        <Clock color="var(--accent)" size={20} />
+                                        <Edit2 color="var(--accent)" size={20} />
                                     </div>
                                     <div style={{ display: 'flex', flexDirection: 'column', flex: 1, marginLeft: '15px' }}>
-                                        <h3 style={{ margin: 0 }}>Historique Spécialiste</h3>
+                                        <h3 style={{ margin: 0 }}>Modifier le Profil</h3>
                                         <span style={{ fontSize: '0.9rem', opacity: 0.7 }}>{selectedSpecialistForHistorique.name}</span>
                                     </div>
                                     <button onClick={() => setIsHistoriqueModalOpen(false)} className={styles.closeBtn}>×</button>
                                 </div>
                                 <div className={styles.modalBody}>
-                                    <div className={styles.inputGroup} style={{ marginTop: '10px' }}>
+                                    <div className={styles.inputGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                        <div className={styles.inputGroup}>
+                                            <label>Nom complet</label>
+                                            <input 
+                                                type="text" 
+                                                className={styles.luxuryInput} 
+                                                value={selectedSpecialistForHistorique.name || ''} 
+                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, name: e.target.value})}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Rôle</label>
+                                            <input 
+                                                type="text" 
+                                                className={styles.luxuryInput} 
+                                                value={selectedSpecialistForHistorique.role || ''} 
+                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, role: e.target.value})}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Spécialité</label>
+                                            <input 
+                                                type="text" 
+                                                className={styles.luxuryInput} 
+                                                value={selectedSpecialistForHistorique.specialty || ''} 
+                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, specialty: e.target.value})}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Note (0-5)</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.1"
+                                                className={styles.luxuryInput} 
+                                                value={selectedSpecialistForHistorique.rating || 5} 
+                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, rating: parseFloat(e.target.value)})}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Clients Satisfaits</label>
+                                            <input 
+                                                type="text" 
+                                                className={styles.luxuryInput} 
+                                                value={selectedSpecialistForHistorique.satisfied_clients || ''} 
+                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, satisfied_clients: e.target.value})}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Badge / Distinction</label>
+                                            <input 
+                                                type="text" 
+                                                className={styles.luxuryInput} 
+                                                value={selectedSpecialistForHistorique.award_badge || ''} 
+                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, award_badge: e.target.value})}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Expertise Technique (%)</label>
+                                            <input 
+                                                type="number" 
+                                                className={styles.luxuryInput} 
+                                                value={selectedSpecialistForHistorique.tech_expertise || 95} 
+                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, tech_expertise: parseInt(e.target.value)})}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Expertise Hospitalité (%)</label>
+                                            <input 
+                                                type="number" 
+                                                className={styles.luxuryInput} 
+                                                value={selectedSpecialistForHistorique.hosp_expertise || 95} 
+                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, hosp_expertise: parseInt(e.target.value)})}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Expertise Précision (%)</label>
+                                            <input 
+                                                type="number" 
+                                                className={styles.luxuryInput} 
+                                                value={selectedSpecialistForHistorique.prec_expertise || 95} 
+                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, prec_expertise: parseInt(e.target.value)})}
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className={styles.inputGroup} style={{ marginTop: '20px' }}>
+                                        <label>URL de l'image (Base64 ou lien)</label>
+                                        <input 
+                                            type="text" 
+                                            className={styles.luxuryInput} 
+                                            value={selectedSpecialistForHistorique.image || ''} 
+                                            onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, image: e.target.value})}
+                                        />
+                                    </div>
+
+                                    <div className={styles.inputGroup} style={{ marginTop: '20px' }}>
                                         <label>Notes & Historique de Travail</label>
                                         <textarea
                                             className={`${styles.luxuryInput} ${styles.textArea}`}
                                             placeholder="Saisissez l'historique de travail, les records de performance, etc..."
                                             value={selectedSpecialistForHistorique.historique || ''}
                                             onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, historique: e.target.value })}
-                                            style={{ minHeight: '250px' }}
+                                            style={{ minHeight: '150px' }}
                                         />
                                     </div>
                                     <div className={styles.modalActions} style={{ marginTop: '30px' }}>
@@ -3537,10 +3741,20 @@ export default function Dashboard() {
                                                 await updateSpecialist({
                                                     variables: {
                                                         id: selectedSpecialistForHistorique.id,
-                                                        historique: selectedSpecialistForHistorique.historique
+                                                        name: selectedSpecialistForHistorique.name,
+                                                        role: selectedSpecialistForHistorique.role,
+                                                        specialty: selectedSpecialistForHistorique.specialty,
+                                                        image: selectedSpecialistForHistorique.image,
+                                                        rating: selectedSpecialistForHistorique.rating,
+                                                        historique: selectedSpecialistForHistorique.historique,
+                                                        satisfied_clients: selectedSpecialistForHistorique.satisfied_clients,
+                                                        tech_expertise: selectedSpecialistForHistorique.tech_expertise,
+                                                        hosp_expertise: selectedSpecialistForHistorique.hosp_expertise,
+                                                        prec_expertise: selectedSpecialistForHistorique.prec_expertise,
+                                                        award_badge: selectedSpecialistForHistorique.award_badge
                                                     }
                                                 });
-                                                Swal.fire({ title: t('success'), text: 'Historique mis à jour !', icon: 'success', confirmButtonColor: '#DFB96D' });
+                                                Swal.fire({ title: t('success'), text: 'Profil mis à jour !', icon: 'success', confirmButtonColor: '#DFB96D' });
                                                 setIsHistoriqueModalOpen(false);
                                             } catch (e) {
                                                 console.error(e);

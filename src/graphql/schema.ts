@@ -19,6 +19,11 @@ export const typeDefs = gql`
     rating: Float!
     specialty: String!
     historique: String
+    satisfied_clients: String
+    tech_expertise: Int
+    hosp_expertise: Int
+    prec_expertise: Int
+    award_badge: String
   }
 
   type Amenity {
@@ -111,6 +116,7 @@ export const typeDefs = gql`
     services: [Service!]!
     service(id: ID!): Service
     prestataires: [Prestataire!]!
+    prestataire(id: ID!): Prestataire
     amenities: [Amenity!]!
     userLoyalty(userId: ID): UserLoyalty!
     serviceHistory: [ServiceHistory!]!
@@ -135,7 +141,7 @@ export const typeDefs = gql`
 
   type Mutation {
     addService(name: String!, description: String!, price: Float!, image: String!, duration: String!): Service!
-    addPrestataire(name: String!, role: String!, image: String!, rating: Float!, specialty: String!): Prestataire!
+    addPrestataire(name: String!, role: String!, image: String!, rating: Float!, specialty: String!, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String): Prestataire!
     login(email: String!, password: String!): AuthPayload!
     register(email: String!, password: String!, name: String!): AuthPayload!
     syncGoogleUser(email: String!, name: String!): AuthPayload!
@@ -151,11 +157,12 @@ export const typeDefs = gql`
     updateUserRole(userId: ID!, role: String!): User!
     updateUser(userId: ID!, email: String, name: String, role: String, password: String, tier: String, hair_color_pref: String, favorite_coupe: String, nail_color_pref: String, music_pref: String, music_link: String, drink_pref: String, skin_type: String, birthday: String, phone: String, coffee_pref: String, employee_pref: String, favourite_service: String, allergies: String, last_visit_notes: String, image: String): User!
     removeUser(userId: ID!): Boolean
-    updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String): Prestataire!
+    updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String): Prestataire!
     addProduct(name: String!, description: String!, price: Float!, image: String!): Product!
     updateProduct(id: ID!, name: String, description: String, price: Float, image: String): Product!
     removeProduct(id: ID!): Boolean
     updateReservationStatus(id: ID!, status: String!, paymentMode: String): Reservation!
     addClientNote(clientId: ID!, authorId: ID!, content: String!): ClientNote!
+    deleteSpecialist(id: ID!): Boolean
   }
 `;

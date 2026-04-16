@@ -19,6 +19,11 @@ export const GET_DASHBOARD_DATA = gql`
       rating
       specialty
       historique
+      satisfied_clients
+      tech_expertise
+      hosp_expertise
+      prec_expertise
+      award_badge
     }
     amenities {
       name
@@ -200,6 +205,24 @@ export const GET_CLIENT_NOTES = gql`
         id
         name
       }
+    }
+  }
+`;
+export const GET_SPECIALIST = gql`
+  query GetSpecialist($id: ID!) {
+    prestataire(id: $id) {
+      id
+      name
+      role
+      image
+      rating
+      specialty
+      historique
+      satisfied_clients
+      tech_expertise
+      hosp_expertise
+      prec_expertise
+      award_badge
     }
   }
 `;

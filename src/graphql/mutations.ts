@@ -206,8 +206,8 @@ export const UPDATE_RESERVATION_STATUS_MUTATION = gql`
 `;
 
 export const UPDATE_SPECIALIST_MUTATION = gql`
-  mutation UpdateSpecialist($id: ID!, $name: String, $role: String, $image: String, $specialty: String, $rating: Float, $historique: String) {
-    updateSpecialist(id: $id, name: $name, role: $role, image: $image, specialty: $specialty, rating: $rating, historique: $historique) {
+  mutation UpdateSpecialist($id: ID!, $name: String, $role: String, $image: String, $specialty: String, $rating: Float, $historique: String, $satisfied_clients: String, $tech_expertise: Int, $hosp_expertise: Int, $prec_expertise: Int, $award_badge: String) {
+    updateSpecialist(id: $id, name: $name, role: $role, image: $image, specialty: $specialty, rating: $rating, historique: $historique, satisfied_clients: $satisfied_clients, tech_expertise: $tech_expertise, hosp_expertise: $hosp_expertise, prec_expertise: $prec_expertise, award_badge: $award_badge) {
       id
       name
       role
@@ -215,19 +215,29 @@ export const UPDATE_SPECIALIST_MUTATION = gql`
       rating
       specialty
       historique
+      satisfied_clients
+      tech_expertise
+      hosp_expertise
+      prec_expertise
+      award_badge
     }
   }
 `;
 
 export const ADD_PRESTATAIRE_MUTATION = gql`
-  mutation AddPrestataire($name: String!, $role: String!, $image: String!, $rating: Float!, $specialty: String!) {
-    addPrestataire(name: $name, role: $role, image: $image, rating: $rating, specialty: $specialty) {
+  mutation AddPrestataire($name: String!, $role: String!, $image: String!, $rating: Float!, $specialty: String!, $satisfied_clients: String, $tech_expertise: Int, $hosp_expertise: Int, $prec_expertise: Int, $award_badge: String) {
+    addPrestataire(name: $name, role: $role, image: $image, rating: $rating, specialty: $specialty, satisfied_clients: $satisfied_clients, tech_expertise: $tech_expertise, hosp_expertise: $hosp_expertise, prec_expertise: $prec_expertise, award_badge: $award_badge) {
       id
       name
       role
       image
       rating
       specialty
+      satisfied_clients
+      tech_expertise
+      hosp_expertise
+      prec_expertise
+      award_badge
     }
   }
 `;
@@ -243,5 +253,10 @@ export const ADD_CLIENT_NOTE_MUTATION = gql`
         name
       }
     }
+  }
+`;
+export const DELETE_SPECIALIST_MUTATION = gql`
+  mutation DeleteSpecialist($id: ID!) {
+    deleteSpecialist(id: $id)
   }
 `;

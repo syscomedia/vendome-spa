@@ -791,6 +791,12 @@ export interface Prestataire {
     image: string;
     rating: number;
     specialty: string;
+    historique?: string;
+    tech_expertise?: number;
+    hosp_expertise?: number;
+    prec_expertise?: number;
+    award_badge?: string;
+    satisfied_clients?: string;
 }
 
 export interface Service {
@@ -837,32 +843,8 @@ export const SERVICES: Service[] = [
     }
 ];
 
-export const PRESTATAIRES: Prestataire[] = [
-    {
-        id: '1',
-        name: 'Elena Rodriguez',
-        role: 'Maître Esthéticienne',
-        image: 'https://images.pexels.com/photos/3762871/pexels-photo-3762871.jpeg?auto=compress&cs=tinysrgb&w=800',
-        rating: 4.9,
-        specialty: 'HydraFacial & Anti-Âge'
-    },
-    {
-        id: '2',
-        name: 'Sarah Chen',
-        role: 'Massothérapeute Experte',
-        image: 'https://images.unsplash.com/photo-1614608682850-e0d6ed316d47?auto=format&fit=crop&w=800&q=80',
-        rating: 4.8,
-        specialty: 'Tissus Profonds & Pierres Chaudes'
-    },
-    {
-        id: '3',
-        name: 'Sophie Laurent',
-        role: 'Artist Ongulaire Luxe',
-        image: 'https://images.unsplash.com/photo-1519014816548-bf5fe059798b?auto=format&fit=crop&w=800&q=80',
-        rating: 5.0,
-        specialty: 'Manucure Russe & Nail Art'
-    }
-];
+export const PRESTATAIRES: Prestataire[] = [];
+
 
 export const AMENITIES = [
     {

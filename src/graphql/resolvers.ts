@@ -24,11 +24,20 @@ export const resolvers = {
         },
         prestataires: async () => {
             try {
-                const res = await query('SELECT id, name, role, image, rating, specialty, historique FROM prestataires');
+                const res = await query('SELECT id, name, role, image, rating, specialty, historique FROM specialistes');
                 return res.rows;
             } catch (e) {
-                console.error('Error fetching prestataires:', e);
+                console.error('Error fetching specialists:', e);
                 return [];
+            }
+        },
+        prestataire: async (_: any, { id }: any) => {
+            try {
+                const res = await query('SELECT id, name, role, image, rating, specialty, historique FROM specialistes WHERE id = $1', [id]);
+                return res.rows[0];
+            } catch (e) {
+                console.error('Error fetching specialist:', e);
+                return null;
             }
         },
         amenities: async () => {
@@ -114,7 +123,7 @@ export const resolvers = {
                     FROM reservations r
                     LEFT JOIN users u ON r.user_id = u.id
                     LEFT JOIN services s ON r.service_id = s.id
-                    LEFT JOIN prestataires p ON r.prestataire_id = p.id
+                    LEFT JOIN specialistes p ON r.prestataire_id = p.id
                 `;
                 let values: any[] = [];
                 if (userId) {
@@ -165,7 +174,7 @@ export const resolvers = {
                         json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
                     FROM personnel_evaluations e
                     JOIN users u ON e.user_id = u.id
-                    JOIN prestataires p ON e.prestataire_id = p.id
+                    JOIN specialistes p ON e.prestataire_id = p.id
                     ORDER BY e.created_at DESC
                 `);
                 return res.rows;
@@ -295,7 +304,7 @@ export const resolvers = {
                     FROM reservations r
                     LEFT JOIN users u ON r.user_id = u.id
                     LEFT JOIN services s ON r.service_id = s.id
-                    LEFT JOIN prestataires p ON r.prestataire_id = p.id
+                    LEFT JOIN specialistes p ON r.prestataire_id = p.id
                     WHERE r.id = $1
                 `, [res.rows[0].id]);
 
@@ -344,10 +353,10 @@ export const resolvers = {
             );
             return res.rows[0];
         },
-        addPrestataire: async (_: any, { name, role, image, rating, specialty }: any) => {
+        addPrestataire: async (_: any, { name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge }: any) => {
             const res = await query(
-                'INSERT INTO prestataires (name, role, image, rating, specialty) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-                [name, role, image, rating, specialty]
+                'INSERT INTO specialistes (name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
+                [name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge]
             );
             return res.rows[0];
         },
@@ -587,9 +596,9 @@ export const resolvers = {
             await query('DELETE FROM products WHERE id = $1', [id]);
             return true;
         },
-        updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique }: any) => {
+        updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge }: any) => {
             try {
-                let queryText = 'UPDATE prestataires SET ';
+                let queryText = 'UPDATE specialistes SET ';
                 const values: any[] = [];
                 const updates: string[] = [];
 
@@ -599,9 +608,14 @@ export const resolvers = {
                 if (specialty) { updates.push(`specialty = $${values.length + 1}`); values.push(specialty); }
                 if (rating !== undefined) { updates.push(`rating = $${values.length + 1}`); values.push(rating); }
                 if (historique !== undefined) { updates.push(`historique = $${values.length + 1}`); values.push(historique); }
+                if (satisfied_clients !== undefined) { updates.push(`satisfied_clients = $${values.length + 1}`); values.push(satisfied_clients); }
+                if (tech_expertise !== undefined) { updates.push(`tech_expertise = $${values.length + 1}`); values.push(tech_expertise); }
+                if (hosp_expertise !== undefined) { updates.push(`hosp_expertise = $${values.length + 1}`); values.push(hosp_expertise); }
+                if (prec_expertise !== undefined) { updates.push(`prec_expertise = $${values.length + 1}`); values.push(prec_expertise); }
+                if (award_badge !== undefined) { updates.push(`award_badge = $${values.length + 1}`); values.push(award_badge); }
 
                 if (updates.length === 0) {
-                    const res = await query('SELECT * FROM prestataires WHERE id = $1', [id]);
+                    const res = await query('SELECT * FROM specialistes WHERE id = $1', [id]);
                     return res.rows[0];
                 }
 
@@ -613,6 +627,15 @@ export const resolvers = {
             } catch (e) {
                 console.error('Update specialist error:', e);
                 throw new Error("Failed to update specialist");
+            }
+        },
+        deleteSpecialist: async (_: any, { id }: any) => {
+            try {
+                await query('DELETE FROM specialistes WHERE id = $1', [id]);
+                return true;
+            } catch (e) {
+                console.error('Error deleting specialist:', e);
+                return false;
             }
         },
         updateReservationStatus: async (_: any, { id, status, paymentMode }: any) => {
@@ -636,7 +659,7 @@ export const resolvers = {
                     FROM reservations r
                     LEFT JOIN users u ON r.user_id = u.id
                     LEFT JOIN services s ON r.service_id = s.id
-                    LEFT JOIN prestataires p ON r.prestataire_id = p.id
+                    LEFT JOIN specialistes p ON r.prestataire_id = p.id
                     WHERE r.id = $1
                 `, [id]);
                 return fullRes.rows[0];
