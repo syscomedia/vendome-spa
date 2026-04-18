@@ -216,21 +216,21 @@ export default function SpecialistDetail() {
                                 <div className={styles.inlineHeaderEdit}>
                                     <input 
                                         className={styles.inlineInputName}
-                                        value={headerForm.name}
+                                        value={headerForm.name || ''}
                                         onChange={(e) => setHeaderForm({ ...headerForm, name: e.target.value })}
                                         placeholder="Nom du Spécialiste"
                                     />
                                     <div className={styles.inlineRow}>
                                         <input 
                                             className={styles.inlineInputSub}
-                                            value={headerForm.role}
+                                            value={headerForm.role || ''}
                                             onChange={(e) => setHeaderForm({ ...headerForm, role: e.target.value })}
                                             placeholder="Rôle"
                                         />
                                         <span>—</span>
                                         <input 
                                             className={styles.inlineInputSub}
-                                            value={headerForm.specialty}
+                                            value={headerForm.specialty || ''}
                                             onChange={(e) => setHeaderForm({ ...headerForm, specialty: e.target.value })}
                                             placeholder="Spécialité"
                                         />
@@ -463,7 +463,7 @@ export default function SpecialistDetail() {
                                     <label>Nom Complet</label>
                                     <input
                                         type="text"
-                                        value={editForm.name}
+                                        value={editForm.name || ''}
                                         onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
                                         className={styles.luxuryInput}
                                     />
@@ -472,7 +472,7 @@ export default function SpecialistDetail() {
                                     <label>Rôle</label>
                                     <input
                                         type="text"
-                                        value={editForm.role}
+                                        value={editForm.role || ''}
                                         onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
                                         className={styles.luxuryInput}
                                     />
@@ -481,7 +481,7 @@ export default function SpecialistDetail() {
                                     <label>Spécialité</label>
                                     <input
                                         type="text"
-                                        value={editForm.specialty}
+                                        value={editForm.specialty || ''}
                                         onChange={(e) => setEditForm({ ...editForm, specialty: e.target.value })}
                                         className={styles.luxuryInput}
                                     />
@@ -491,7 +491,7 @@ export default function SpecialistDetail() {
                                     <input
                                         type="number"
                                         step="0.1"
-                                        value={editForm.rating}
+                                        value={editForm.rating ?? 0}
                                         onChange={(e) => setEditForm({ ...editForm, rating: parseFloat(e.target.value) })}
                                         className={styles.luxuryInput}
                                     />
@@ -500,7 +500,7 @@ export default function SpecialistDetail() {
                                     <label>Clients Satisfaits</label>
                                     <input
                                         type="text"
-                                        value={editForm.satisfied_clients}
+                                        value={editForm.satisfied_clients || ''}
                                         onChange={(e) => setEditForm({ ...editForm, satisfied_clients: e.target.value })}
                                         className={styles.luxuryInput}
                                     />
@@ -509,7 +509,7 @@ export default function SpecialistDetail() {
                                     <label>Badge / Distinction</label>
                                     <input
                                         type="text"
-                                        value={editForm.award_badge}
+                                        value={editForm.award_badge || ''}
                                         onChange={(e) => setEditForm({ ...editForm, award_badge: e.target.value })}
                                         className={styles.luxuryInput}
                                     />
@@ -518,7 +518,7 @@ export default function SpecialistDetail() {
                                     <label>Expertise Technique (%)</label>
                                     <input
                                         type="number"
-                                        value={editForm.tech_expertise}
+                                        value={editForm.tech_expertise ?? 0}
                                         onChange={(e) => setEditForm({ ...editForm, tech_expertise: parseInt(e.target.value) })}
                                         className={styles.luxuryInput}
                                     />
@@ -527,7 +527,7 @@ export default function SpecialistDetail() {
                                     <label>Expertise Hospitalité (%)</label>
                                     <input
                                         type="number"
-                                        value={editForm.hosp_expertise}
+                                        value={editForm.hosp_expertise ?? 0}
                                         onChange={(e) => setEditForm({ ...editForm, hosp_expertise: parseInt(e.target.value) })}
                                         className={styles.luxuryInput}
                                     />
@@ -536,7 +536,7 @@ export default function SpecialistDetail() {
                                     <label>Expertise Précision (%)</label>
                                     <input
                                         type="number"
-                                        value={editForm.prec_expertise}
+                                        value={editForm.prec_expertise ?? 0}
                                         onChange={(e) => setEditForm({ ...editForm, prec_expertise: parseInt(e.target.value) })}
                                         className={styles.luxuryInput}
                                     />
@@ -600,7 +600,7 @@ export default function SpecialistDetail() {
                             <div className={styles.inputGroup} style={{ marginTop: '20px' }}>
                                 <label>Parcours d'Excellence (Biographie)</label>
                                 <textarea
-                                    value={editForm.historique}
+                                    value={editForm.historique || ''}
                                     onChange={(e) => setEditForm({ ...editForm, historique: e.target.value })}
                                     className={`${styles.luxuryInput} ${styles.textArea}`}
                                     rows={5}
