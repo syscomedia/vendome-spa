@@ -201,6 +201,7 @@ export const UPDATE_RESERVATION_STATUS_MUTATION = gql`
       id
       status
       paymentMode
+      externalTitle
     }
   }
 `;
@@ -258,5 +259,43 @@ export const ADD_CLIENT_NOTE_MUTATION = gql`
 export const DELETE_SPECIALIST_MUTATION = gql`
   mutation DeleteSpecialist($id: ID!) {
     deleteSpecialist(id: $id)
+  }
+`;
+
+export const UPDATE_RESERVATION_DATE_MUTATION = gql`
+  mutation UpdateReservationDate($id: ID!, $date: String!) {
+    updateReservationDate(id: $id, date: $date) {
+      id
+      date
+      status
+      externalTitle
+    }
+  }
+`;
+
+export const SYNC_GOOGLE_CALENDAR_MUTATION = gql`
+  mutation SyncGoogleCalendar {
+    syncGoogleCalendar
+  }
+`;
+
+export const CONVERT_EXTERNAL_TO_RESERVATION_MUTATION = gql`
+  mutation ConvertExternalToReservation($externalId: ID!, $userId: ID!, $serviceId: ID!, $prestataireId: ID!) {
+    convertExternalToReservation(externalId: $externalId, userId: $userId, serviceId: $serviceId, prestataireId: $prestataireId) {
+      id
+      date
+      status
+      externalTitle
+    }
+  }
+`;
+
+export const DEDUCT_POINTS_MUTATION = gql`
+  mutation DeductPoints($userId: ID!, $points: Int!) {
+    deductPoints(userId: $userId, points: $points) {
+      id
+      name
+      points
+    }
   }
 `;

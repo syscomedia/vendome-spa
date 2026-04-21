@@ -1,4 +1,9 @@
 import { query } from '@/lib/db';
+import { 
+    createGoogleCalendarEvent, 
+    listGoogleCalendarEvents,
+    getAuthorizedGoogleClient
+} from '@/lib/google-calendar';
 
 export const resolvers = {
     Query: {
@@ -96,7 +101,7 @@ export const resolvers = {
         },
         clients: async () => {
             try {
-                const res = await query("SELECT id, email, name, role, points, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image FROM users ORDER BY name ASC");
+                const res = await query("SELECT id, email, name, role, points, tier, password, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image FROM users ORDER BY name ASC");
                 return res.rows;
             } catch (e) {
                 console.error('Error fetching clients:', e);
@@ -116,7 +121,7 @@ export const resolvers = {
             try {
                 let queryText = `
                     SELECT 
-                        r.id, r.date, r.status,
+                        r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode",
                         json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration, 'description', s.description) as service,
                         json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
@@ -199,6 +204,19 @@ export const resolvers = {
                 }));
             } catch (e) {
                 console.error('Error fetching client notes:', e);
+                return [];
+            }
+        },
+        externalEvents: async () => {
+            try {
+                const res = await query('SELECT id, google_event_id, title, start_date as "startDate", end_date as "endDate", reservation_id as "reservationId" FROM external_events ORDER BY start_date ASC');
+                return res.rows.map(row => ({
+                    ...row,
+                    startDate: row.startDate.toISOString(),
+                    endDate: row.endDate?.toISOString()
+                }));
+            } catch (e) {
+                console.error('Error fetching external events:', e);
                 return [];
             }
         },
@@ -308,7 +326,10 @@ export const resolvers = {
                     WHERE r.id = $1
                 `, [res.rows[0].id]);
 
-                return fullRes.rows[0];
+                return {
+                    ...fullRes.rows[0],
+                    date: fullRes.rows[0].date ? new Date(fullRes.rows[0].date).toISOString() : null
+                };
             } catch (e) {
                 console.error(e);
                 throw new Error("Failed to create reservation");
@@ -638,7 +659,19 @@ export const resolvers = {
                 return false;
             }
         },
-        updateReservationStatus: async (_: any, { id, status, paymentMode }: any) => {
+        deductPoints: async (_: any, { userId, points }: any) => {
+            try {
+                const res = await query(
+                    'UPDATE users SET points = GREATEST(0, points - $1) WHERE id = $2 RETURNING id, email, name, role, points, tier, password, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image',
+                    [points, userId]
+                );
+                return res.rows[0];
+            } catch (e) {
+                console.error('Error deducting points:', e);
+                throw e;
+            }
+        },
+        updateReservationStatus: async (_: any, { id, status, paymentMode }: any, { session }: any) => {
             try {
                 let queryText = 'UPDATE reservations SET status = $1';
                 const values = [status, id];
@@ -652,7 +685,7 @@ export const resolvers = {
                 
                 const fullRes = await query(`
                     SELECT 
-                        r.id, r.date, r.status, r.payment_mode as "paymentMode",
+                        r.id, r.date, r.status, r.payment_mode as "paymentMode", r.external_title as "externalTitle", r.google_event_id,
                         json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
                         json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
@@ -662,10 +695,93 @@ export const resolvers = {
                     LEFT JOIN specialistes p ON r.prestataire_id = p.id
                     WHERE r.id = $1
                 `, [id]);
-                return fullRes.rows[0];
+                
+                const result = {
+                    ...fullRes.rows[0],
+                    date: fullRes.rows[0].date ? new Date(fullRes.rows[0].date).toISOString() : null
+                };
+
+                // Push to Google Calendar if status is confirmed
+                if (status === 'confirmed' && session?.user?.email) {
+                    try {
+                        const auth = await getAuthorizedGoogleClient(session.user.email);
+                        if (auth) {
+                            const eventId = await createGoogleCalendarEvent(auth, result);
+                            if (eventId) {
+                                await query('UPDATE reservations SET google_event_id = $1 WHERE id = $2', [eventId, id]);
+                            }
+                        }
+                    } catch (ge) {
+                        console.error('Google Calendar Push Error:', ge);
+                    }
+                }
+
+                return result;
             } catch (e) {
                 console.error(e);
                 throw new Error("Failed to update reservation status");
+            }
+        },
+        syncGoogleCalendar: async (_: any, __: any, { session }: any) => {
+            if (!session?.user?.email) return false;
+            try {
+                const auth = await getAuthorizedGoogleClient(session.user.email);
+                if (!auth) {
+                    console.log("No authorized Google client found for", session.user.email);
+                    return false;
+                }
+
+                // Fetch events from 7 days ago to 7 days in the future
+                const timeMin = new Date();
+                timeMin.setDate(timeMin.getDate() - 7);
+                
+                const events = await listGoogleCalendarEvents(auth, timeMin.toISOString());
+                console.log(`Found ${events.length} events in Google Calendar`);
+                for (const event of events) {
+                    const eventId = event.id;
+                    const title = event.summary || 'Sans titre';
+                    const startDate = event.start?.dateTime || event.start?.date;
+                    const endDate = event.end?.dateTime || event.end?.date;
+
+                    if (!startDate) continue;
+
+                    await query(`
+                        INSERT INTO external_events (google_event_id, title, start_date, end_date)
+                        VALUES ($1, $2, $3, $4)
+                        ON CONFLICT (google_event_id) DO UPDATE SET
+                            title = EXCLUDED.title,
+                            start_date = EXCLUDED.start_date,
+                            end_date = EXCLUDED.end_date
+                    `, [eventId, title, startDate, endDate]);
+                }
+                return true;
+            } catch (e) {
+                console.error('Sync Error:', e);
+                return false;
+            }
+        },
+        updateReservationDate: async (_: any, { id, date }: any) => {
+            try {
+                await query('UPDATE reservations SET date = $1 WHERE id = $2', [date, id]);
+                const fullRes = await query(`
+                    SELECT 
+                        r.id, r.date, r.status,
+                        json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
+                        json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
+                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
+                    FROM reservations r
+                    LEFT JOIN users u ON r.user_id = u.id
+                    LEFT JOIN services s ON r.service_id = s.id
+                    LEFT JOIN specialistes p ON r.prestataire_id = p.id
+                    WHERE r.id = $1
+                `, [id]);
+                return {
+                    ...fullRes.rows[0],
+                    date: fullRes.rows[0].date ? new Date(fullRes.rows[0].date).toISOString() : null
+                };
+            } catch (e) {
+                console.error(e);
+                throw new Error("Failed to update reservation date");
             }
         },
         addClientNote: async (_: any, { clientId, authorId, content }: any) => {
@@ -681,6 +797,46 @@ export const resolvers = {
             } catch (e) {
                 console.error('Error adding client note:', e);
                 throw new Error("Failed to add client note");
+            }
+        },
+        convertExternalToReservation: async (_: any, { externalId, userId, serviceId, prestataireId }: any) => {
+            try {
+                // Get event details
+                const eventRes = await query('SELECT title, start_date FROM external_events WHERE id = $1', [externalId]);
+                const event = eventRes.rows[0];
+                if (!event) throw new Error('External event not found');
+
+                // Create reservation
+                const res = await query(
+                    'INSERT INTO reservations (user_id, service_id, prestataire_id, date, status, external_title) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+                    [userId, serviceId, prestataireId, event.start_date, 'confirmed', event.title]
+                );
+                const reservationId = res.rows[0].id;
+
+                // Update external event link
+                await query('UPDATE external_events SET reservation_id = $1 WHERE id = $2', [reservationId, externalId]);
+
+                // Return full reservation
+                const fullRes = await query(`
+                    SELECT 
+                        r.id, r.date, r.status, r.external_title as "externalTitle",
+                        json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
+                        json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
+                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
+                    FROM reservations r
+                    LEFT JOIN users u ON r.user_id = u.id
+                    LEFT JOIN services s ON r.service_id = s.id
+                    LEFT JOIN specialistes p ON r.prestataire_id = p.id
+                    WHERE r.id = $1
+                `, [reservationId]);
+
+                return {
+                    ...fullRes.rows[0],
+                    date: fullRes.rows[0].date ? new Date(fullRes.rows[0].date).toISOString() : null
+                };
+            } catch (e) {
+                console.error('Error converting event:', e);
+                throw e;
             }
         }
     },

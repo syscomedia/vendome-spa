@@ -4,12 +4,20 @@ import { typeDefs } from '@/graphql/schema';
 import { resolvers } from '@/graphql/resolvers';
 import { NextRequest } from 'next/server';
 
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+
 const server = new ApolloServer({
     typeDefs,
     resolvers,
 });
 
-const handler = startServerAndCreateNextHandler<NextRequest>(server);
+const handler = startServerAndCreateNextHandler<NextRequest>(server, {
+    context: async (req) => {
+        const session = await getServerSession(authOptions);
+        return { req, session };
+    },
+});
 
 export async function GET(request: NextRequest) {
     return handler(request);

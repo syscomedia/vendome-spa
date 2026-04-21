@@ -392,17 +392,31 @@ export default function FicheClientTab({
                         exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.25 }}
                         className={styles.ficheSections}
                     >
-                        {/* Music */}
-                        <div className={styles.ficheCard}>
+                        {/* Music — Membre Gold only */}
+                        <div className={styles.ficheCard} style={{ position: 'relative', overflow: 'hidden' }}>
                             <div className={styles.ficheCardHead}>
                                 <div className={styles.ficheCardIcon}><Music2 size={16} /></div>
                                 <div>
                                     <h3 className={styles.ficheCardTitle}>Ambiance musicale</h3>
                                     <p className={styles.ficheCardSub}>Durant vos soins</p>
                                 </div>
-                                {fiche.music_pref && <div className={styles.ficheDoneTag}><Check size={11} /> Choisi</div>}
+                                {fiche.tier === 'Membre Gold' && fiche.music_pref && (
+                                    <div className={styles.ficheDoneTag}><Check size={11} /> Choisi</div>
+                                )}
+                                {fiche.tier !== 'Membre Gold' && (
+                                    <div style={{
+                                        display: 'flex', alignItems: 'center', gap: '5px',
+                                        background: 'linear-gradient(135deg, #C9973A, #DFB96D)',
+                                        color: '#fff', fontSize: '0.65rem', fontWeight: 800,
+                                        padding: '4px 10px', borderRadius: '50px',
+                                        letterSpacing: '0.5px', textTransform: 'uppercase'
+                                    }}>
+                                        <Star size={10} /> Gold uniquement
+                                    </div>
+                                )}
                             </div>
-                            <div className={styles.ficheMusicGrid}>
+
+                            <div className={styles.ficheMusicGrid} style={{ opacity: fiche.tier === 'Membre Gold' ? 1 : 0.25, pointerEvents: fiche.tier === 'Membre Gold' ? 'auto' : 'none' }}>
                                 {MUSIC_OPTIONS.map(m => (
                                     <button key={m.label}
                                         className={`${styles.ficheMusicCard} ${fiche.music_pref === m.label ? styles.ficheMusicCardActive : ''}`}
@@ -415,8 +429,7 @@ export default function FicheClientTab({
                                 ))}
                             </div>
 
-                            {/* Music link input */}
-                            <div className={styles.ficheMusicLinkRow}>
+                            <div className={styles.ficheMusicLinkRow} style={{ opacity: fiche.tier === 'Membre Gold' ? 1 : 0.25, pointerEvents: fiche.tier === 'Membre Gold' ? 'auto' : 'none' }}>
                                 <Link2 size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
                                 <input
                                     className={styles.ficheInputInline}
@@ -436,6 +449,35 @@ export default function FicheClientTab({
                                     </a>
                                 )}
                             </div>
+
+                            {/* Lock overlay for non-Gold members */}
+                            {fiche.tier !== 'Membre Gold' && (
+                                <div style={{
+                                    position: 'absolute', inset: 0,
+                                    display: 'flex', flexDirection: 'column',
+                                    alignItems: 'center', justifyContent: 'center',
+                                    gap: '10px', cursor: 'not-allowed',
+                                    background: 'rgba(255,253,249,0.6)',
+                                    backdropFilter: 'blur(3px)',
+                                    borderRadius: 'inherit',
+                                    zIndex: 2
+                                }}>
+                                    <div style={{
+                                        background: 'linear-gradient(135deg, #C9973A, #DFB96D)',
+                                        borderRadius: '50%', width: '48px', height: '48px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        boxShadow: '0 6px 20px rgba(223,185,109,0.4)'
+                                    }}>
+                                        <Star size={22} color="#fff" fill="#fff" />
+                                    </div>
+                                    <p style={{ fontWeight: 800, fontSize: '0.9rem', color: '#1A0F0A', margin: 0 }}>
+                                        Réservé aux Membres Gold
+                                    </p>
+                                    <p style={{ fontSize: '0.78rem', color: '#8B7355', margin: 0, textAlign: 'center', maxWidth: '220px' }}>
+                                        Passez en Gold pour personnaliser votre ambiance musicale
+                                    </p>
+                                </div>
+                            )}
                         </div>
 
                         {/* Drinks */}

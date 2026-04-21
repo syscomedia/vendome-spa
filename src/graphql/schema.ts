@@ -57,6 +57,7 @@ export const typeDefs = gql`
     role: String
     points: Int
     tier: String
+    password: String
     hair_color_pref: String
     favorite_coupe: String
     nail_color_pref: String
@@ -112,6 +113,15 @@ export const typeDefs = gql`
     createdAt: String!
   }
 
+  type ExternalEvent {
+    id: ID!
+    google_event_id: String
+    title: String
+    startDate: String
+    endDate: String
+    reservationId: Int
+  }
+
   type Query {
     services: [Service!]!
     service(id: ID!): Service
@@ -128,6 +138,7 @@ export const typeDefs = gql`
     waitingComments: [WaitingComment!]!
     personnelEvaluations: [Evaluation!]!
     clientNotes(clientId: ID): [ClientNote!]!
+    externalEvents: [ExternalEvent!]!
   }
 
   type Evaluation {
@@ -148,6 +159,7 @@ export const typeDefs = gql`
     createReservation(userId: ID!, serviceId: ID!, prestataireId: ID!, date: String!): Reservation!
     addWaitingComment(userId: ID!, comment: String!): WaitingComment!
     addTip(userId: ID!, prestataireId: ID!, amount: Float!): Boolean
+    convertExternalToReservation(externalId: ID!, userId: ID!, serviceId: ID!, prestataireId: ID!): Reservation!
     applyReferral(userId: ID!, code: String!): Boolean
     addPersonnelEvaluation(userId: ID!, personnelId: ID!, rating: Int!, comment: String!): Boolean
     deleteReservation(id: ID!): Boolean
@@ -162,7 +174,10 @@ export const typeDefs = gql`
     updateProduct(id: ID!, name: String, description: String, price: Float, image: String): Product!
     removeProduct(id: ID!): Boolean
     updateReservationStatus(id: ID!, status: String!, paymentMode: String): Reservation!
+    updateReservationDate(id: ID!, date: String!): Reservation!
+    syncGoogleCalendar: Boolean!
     addClientNote(clientId: ID!, authorId: ID!, content: String!): ClientNote!
     deleteSpecialist(id: ID!): Boolean
+    deductPoints(userId: ID!, points: Int!): User!
   }
 `;

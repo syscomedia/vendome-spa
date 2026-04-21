@@ -43,3 +43,8 @@ next-env.d.ts
 # temp/data
 .sentry-native/
 public/uploads/
+
+# Google Secrets & Scratch
+client_secret_*.json
+scratch/
+google-calendar-token.json

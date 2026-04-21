@@ -52,6 +52,7 @@ export const GET_DASHBOARD_DATA = gql`
       role
       points
       tier
+      password
       hair_color_pref
       favorite_coupe
       nail_color_pref
@@ -87,6 +88,14 @@ export const GET_DASHBOARD_DATA = gql`
         name
         image
       }
+    }
+    externalEvents {
+      id
+      google_event_id
+      title
+      startDate
+      endDate
+      reservationId
     }
   }
 `;
@@ -125,6 +134,7 @@ export const GET_WAITING_DATA = gql`
         prestataire {
             name
             role
+            image
         }
     }
   }

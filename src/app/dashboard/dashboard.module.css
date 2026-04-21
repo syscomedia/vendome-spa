@@ -1095,6 +1095,7 @@
 
 .clientInfo {
     flex: 1;
+    min-width: 0;
 }
 
 .clientInfo h4 {
@@ -1115,6 +1116,70 @@
     font-size: 0.8rem;
     font-weight: 800;
     text-transform: uppercase;
+}
+
+.clientCardActions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+}
+
+.clientCardTop {
+    display: contents;
+}
+
+.clientPasswordRow {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 5px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.clientPasswordLabel {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    flex-shrink: 0;
+}
+
+.clientPasswordValue {
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    font-family: monospace;
+    letter-spacing: 1px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.clientPasswordValue:hover {
+    color: var(--accent);
+    text-decoration: underline dotted;
+}
+
+.clientPasswordToggle {
+    background: none;
+    border: none;
+    padding: 3px 6px;
+    cursor: pointer;
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    border-radius: 6px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.clientPasswordToggle:hover {
+    background: rgba(223, 185, 109, 0.12);
 }
 
 
@@ -2677,6 +2742,157 @@
     box-shadow: 0 15px 40px rgba(226, 180, 92, 0.2);
 }
 
+.clientCardGold {
+    background: linear-gradient(145deg, #C9973A 0%, #DFB96D 35%, #F0D080 60%, #C9973A 100%) !important;
+    border: 1.5px solid #C9973A !important;
+    box-shadow:
+        0 12px 40px rgba(184, 138, 68, 0.35),
+        inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.clientCardGold::before {
+    content: '';
+    position: absolute;
+    top: -60%;
+    left: -60%;
+    width: 60%;
+    height: 220%;
+    background: rgba(255, 255, 255, 0.18);
+    transform: rotate(25deg);
+    pointer-events: none;
+    border-radius: 50%;
+}
+
+.clientCardGold:hover {
+    box-shadow:
+        0 20px 55px rgba(184, 138, 68, 0.5),
+        inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
+    transform: translateY(-5px) scale(1.02) !important;
+}
+
+.clientCardGold .clientInfo h4 {
+    color: #fff !important;
+    -webkit-text-fill-color: #fff !important;
+    text-shadow: 0 1px 4px rgba(120, 80, 0, 0.3);
+    animation: none !important;
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+}
+
+.clientCardGold .clientInfo p {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.clientCardGold .clientPasswordLabel {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.clientCardGold .clientPasswordValue {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.clientCardGold .clientPasswordToggle {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.clientCardGold .clientPasswordToggle:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+}
+
+.clientCardGold .clientIcon {
+    background: rgba(255, 255, 255, 0.25) !important;
+    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    color: #fff !important;
+}
+
+.clientCardGold .clientCardTop {
+    border-bottom-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+/* Hide redundant tier dropdown on gold cards */
+.clientCardGold .clientCardActions > div:first-child {
+    display: none !important;
+}
+
+/* All action buttons readable on gold background */
+.clientCardGold .dropdownTrigger {
+    background: #fff !important;
+    border-color: rgba(180, 130, 40, 0.3) !important;
+    color: #1A0F0A !important;
+}
+
+.clientCardGold .dropdownTrigger:hover {
+    background: #FFF9EE !important;
+}
+
+.clientCardGold .dropdownMenu {
+    background: #fff !important;
+    color: #1A0F0A !important;
+}
+
+/* MESSAGERIE button on gold */
+.clientCardGold .btnSaveLux {
+    background: #1A0F0A !important;
+    color: #DFB96D !important;
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+}
+
+.clientCardGold .btnSaveLux:hover {
+    background: #2d1a0e !important;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3) !important;
+}
+
+/* FICHE CLIENT button on gold */
+.clientCardGold .btnCancel {
+    background: #fff !important;
+    color: #1A0F0A !important;
+    border-color: rgba(180, 130, 40, 0.3) !important;
+}
+
+.clientCardGold .btnCancel:hover {
+    background: #FFF9EE !important;
+}
+
+/* SUPPRIMER button on gold */
+.clientCardGold .btnDeleteLux {
+    background: #fff !important;
+    color: #cc3333 !important;
+    border-color: rgba(204, 51, 51, 0.4) !important;
+}
+
+.clientCardGold .btnDeleteLux:hover {
+    background: #ff4444 !important;
+    color: #fff !important;
+    border-color: transparent !important;
+}
+
+.goldBadge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    color: #fff;
+    font-size: 0.6rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    padding: 2px 8px;
+    border-radius: 50px;
+    margin-left: 8px;
+    vertical-align: middle;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(4px);
+}
+
+@keyframes goldShimmer {
+    0% { background-position: 0% center; }
+    100% { background-position: 200% center; }
+}
+
 .dropdownMenu {
     position: absolute;
     top: calc(100% + 8px);
@@ -3687,13 +3903,26 @@
 
 .filterSelect {
     background: #F8F5F0;
-    border: 1px solid rgba(226, 180, 92, 0.2);
-    padding: 10px 15px;
-    border-radius: 12px;
+    border: 1px solid rgba(226, 180, 92, 0.3);
+    padding: 10px 40px 10px 20px;
+    border-radius: 30px;
     font-family: 'Outfit', sans-serif;
     color: var(--primary);
     outline: none;
     cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23DFB96D' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 15px center;
+    background-size: 16px;
+    transition: all 0.3s ease;
+    font-weight: 600;
+}
+
+.filterSelect:hover {
+    border-color: var(--accent);
+    background-color: #ffffff;
+    box-shadow: 0 4px 12px rgba(223, 185, 109, 0.1);
 }
 
 /* --- RESPONSIVE (Moved to end to ensure overrides) --- */
@@ -4339,7 +4568,7 @@
     .modalOverlay {
         align-items: flex-end;
         justify-content: center;
-        z-index: 2000;
+        z-index: 1000;
         padding: 0;
     }
 
@@ -5240,4 +5469,856 @@
 
 .luxuryOptionBtn:hover::after {
     opacity: 0.05;
+}
+
+/* --- PREMIUM SWEETALERT2 STYLES --- */
+.swalPopup {
+    background: linear-gradient(165deg, #1A0F0A 0%, #2D1A12 100%) !important;
+    border: 1px solid rgba(223, 185, 109, 0.3) !important;
+    border-radius: 40px !important;
+    padding: 2.5rem !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7) !important;
+}
+
+.swalTitle {
+    color: white !important;
+    font-family: 'Playfair Display', serif !important;
+    font-weight: 800 !important;
+    font-size: 1.8rem !important;
+    letter-spacing: -0.5px !important;
+}
+
+.swalText {
+    color: rgba(255, 255, 255, 0.7) !important;
+    font-size: 1.1rem !important;
+    line-height: 1.6 !important;
+    font-weight: 400 !important;
+}
+
+.swalConfirmButton {
+    background: linear-gradient(135deg, #DFB96D 0%, #B8860B 100%) !important;
+    color: #1A0F0A !important;
+    border-radius: 50px !important;
+    padding: 12px 35px !important;
+    font-weight: 800 !important;
+    font-size: 1rem !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
+    border: none !important;
+    box-shadow: 0 10px 20px rgba(223, 185, 109, 0.2) !important;
+    transition: all 0.3s ease !important;
+}
+
+.swalConfirmButton:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 15px 25px rgba(223, 185, 109, 0.3) !important;
+}
+
+.swalCancelButton {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: white !important;
+    border-radius: 50px !important;
+    padding: 12px 30px !important;
+    font-weight: 700 !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    transition: all 0.3s ease !important;
+}
+
+.swalCancelButton:hover {
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.swalSelect {
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: white !important;
+    border: 1px solid rgba(223, 185, 109, 0.4) !important;
+    border-radius: 50px !important;
+    padding: 14px 25px !important;
+    font-size: 1.05rem !important;
+    margin-top: 20px !important;
+    width: 100% !important;
+    outline: none !important;
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1) !important;
+    appearance: none !important;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='%23DFB96D' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+    background-repeat: no-repeat !important;
+    background-position: right 25px center !important;
+    background-size: 18px !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2) !important;
+    cursor: pointer !important;
+}
+
+.swalSelect:hover {
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-color: #DFB96D !important;
+    box-shadow: 0 0 20px rgba(223, 185, 109, 0.2) !important;
+}
+
+.swalSelect:focus {
+    border-color: #DFB96D !important;
+    box-shadow: 0 0 25px rgba(223, 185, 109, 0.3) !important;
+}
+
+.swalSelect option {
+    background: #2D1A12 !important;
+    color: white !important;
+    padding: 15px !important;
+    font-size: 1rem !important;
+}
+
+.statusSelectionGrid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 15px;
+    margin-top: 25px;
+    width: 100%;
+}
+
+.statusOptionBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 20px;
+    border-radius: 50px;
+    font-weight: 700;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.03);
+    color: rgba(255, 255, 255, 0.8);
+    width: 100%;
+    gap: 12px;
+}
+
+.statusOptionBtn:hover {
+    transform: translateY(-3px);
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: white;
+}
+
+.statusOptionBtn.confirmed {
+    color: #2D6A4F;
+    border-color: rgba(45, 106, 79, 0.3);
+    background: rgba(45, 106, 79, 0.05);
+}
+
+.statusOptionBtn.confirmed:hover {
+    background: rgba(45, 106, 79, 0.15);
+    border-color: #2D6A4F;
+    color: #40916C;
+}
+
+.statusOptionBtn.pending {
+    color: #DFB96D;
+    border-color: rgba(223, 185, 109, 0.3);
+    background: rgba(223, 185, 109, 0.05);
+}
+
+.statusOptionBtn.pending:hover {
+    background: rgba(223, 185, 109, 0.15);
+    border-color: #DFB96D;
+    color: white;
+}
+
+.statusOptionBtn.cancelled {
+    color: #D62828;
+    border-color: rgba(214, 40, 40, 0.3);
+    background: rgba(214, 40, 40, 0.05);
+}
+
+.statusOptionBtn.cancelled:hover {
+    background: rgba(214, 40, 40, 0.15);
+    border-color: #D62828;
+    color: #FF5E5E;
+}
+
+.statusOptionBtn.active {
+    box-shadow: 0 0 20px currentColor;
+    border-width: 2px;
+}
+
+.googleSyncBtn {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: white;
+    border: 1px solid #ddd;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.googleSyncBtn:hover {
+    background: #f8f8f8;
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    transform: translateY(-1px);
+}
+
+.googleSyncBtn img {
+    flex-shrink: 0;
+}
+
+/* --- LUXURY MOBILE RESPONSIVE MODAL & TABLE --- */
+@media (max-width: 768px) {
+    .modalWide {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        border-radius: 30px 30px 0 0 !important;
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        max-height: 92vh !important;
+        padding: 25px 15px !important;
+        border: none !important;
+        border-top: 5px solid #DFB96D !important;
+    }
+
+    .modalHeader {
+        padding-bottom: 15px !important;
+    }
+
+    .modalHeader h3 {
+        font-size: 1.2rem !important;
+    }
+
+    .revenueFilterRow {
+        flex-direction: column !important;
+        gap: 15px !important;
+    }
+
+    .searchGroup {
+        width: 100% !important;
+    }
+
+    .filterGroup {
+        width: 100% !important;
+    }
+
+    /* Transform Table to Cards */
+    .clientListTable {
+        background: transparent !important;
+        border: none !important;
+        margin-top: 15px !important;
+        padding-bottom: 80px !important; /* Space for the bottom navigation if any */
+    }
+
+    .tableHeader {
+        display: none !important; /* Hide cramped header */
+    }
+
+    .tableRow {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        background: white !important;
+        margin-bottom: 15px !important;
+        border-radius: 20px !important;
+        padding: 20px !important;
+        border: 1px solid rgba(223, 185, 109, 0.1) !important;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.05) !important;
+        position: relative !important;
+        gap: 12px !important;
+        grid-template-columns: none !important; /* Force override inline styles */
+    }
+
+    .agendaTimeCell {
+        font-size: 1.1rem !important;
+        color: #DFB96D !important;
+        font-weight: 800 !important;
+        padding: 0 !important;
+        border-bottom: 1px solid #f5f5f5 !important;
+        width: 100% !important;
+        padding-bottom: 8px !important;
+    }
+
+    .tableName {
+        width: 100% !important;
+        padding: 0 !important;
+    }
+
+    .serviceClientInfo strong {
+        font-size: 1rem !important;
+        display: block !important;
+    }
+
+    .serviceClientInfo span {
+        font-size: 0.85rem !important;
+    }
+
+    .specialistBadge {
+        background: rgba(223, 185, 109, 0.05) !important;
+        padding: 8px 15px !important;
+        border-radius: 12px !important;
+        font-size: 0.8rem !important;
+    }
+
+    .intelStatus {
+        position: absolute !important;
+        top: 20px !important;
+        right: 20px !important;
+        font-size: 0.6rem !important;
+        padding: 4px 10px !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .mobileGrabHandle {
+        display: block !important;
+        width: 40px;
+        height: 5px;
+        background: #e0e0e0;
+        border-radius: 10px;
+        margin: -15px auto 15px;
+    }
+}
+
+/* --- LUXURY CLIENTS MOBILE RESPONSIVE --- */
+@media (max-width: 768px) {
+    .clientsList {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 20px !important;
+        padding-bottom: 120px !important; /* Extra space for floating bottom nav */
+    }
+
+    .clientCard {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        padding: 20px !important;
+        gap: 15px !important;
+        position: relative !important;
+    }
+
+    .clientIcon {
+        width: 50px !important;
+        height: 50px !important;
+        border-radius: 15px !important;
+    }
+
+    .clientInfo {
+        width: 100% !important;
+    }
+
+    .clientInfo h4 {
+        font-size: 1.1rem !important;
+        margin-bottom: 4px !important;
+    }
+
+    .clientInfo p {
+        font-size: 0.85rem !important;
+        opacity: 0.7 !important;
+    }
+
+    /* Move Tier Badge / Dropdown */
+    .customDropdown {
+        width: 100% !important;
+        margin-top: 5px !important;
+    }
+
+    .dropdownTrigger {
+        width: 100% !important;
+        justify-content: space-between !important;
+        padding: 12px 20px !important;
+        border-radius: 15px !important;
+        font-size: 0.9rem !important;
+    }
+
+    /* Actions button (if any) positioning */
+    .clientActions {
+        position: absolute !important;
+        top: 20px !important;
+        right: 20px !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .tabContent {
+        padding-bottom: 100px !important;
+    }
+}
+
+/* --- LUXURY CLIENTS MOBILE RESPONSIVE --- */
+@media (max-width: 768px) {
+    .clientsList {
+        gap: 15px !important;
+        padding-bottom: 100px !important;
+    }
+
+    .clientCard {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        padding: 20px !important;
+        gap: 15px !important;
+        border-radius: 24px !important;
+    }
+
+    .clientCard > div:last-child {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding-top: 15px !important;
+        border-top: 1px solid rgba(223, 185, 109, 0.1) !important;
+    }
+
+    .clientIcon {
+        width: 40px !important;
+        height: 40px !important;
+        min-width: 40px !important;
+        border-radius: 12px !important;
+    }
+
+    .clientInfo h4 {
+        font-size: 1.1rem !important;
+    }
+
+    .clientInfo p {
+        font-size: 0.8rem !important;
+    }
+
+    .dropdownTrigger {
+        min-width: 120px !important;
+        padding: 8px 12px !important;
+        font-size: 0.75rem !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .sectionHeader {
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 20px !important;
+        text-align: center !important;
+    }
+
+    .sectionHeader h2 {
+        font-size: 1.8rem !important;
+    }
+}
+
+/* --- FINAL MOBILE APP-LIKE REFINEMENTS --- */
+@media (max-width: 768px) {
+    /* Hero Banner Refinement */
+    .heroBanner {
+        height: 300px !important;
+        margin: 10px !important;
+        border-radius: 30px !important;
+        padding: 0 30px !important;
+    }
+
+    .welcomeText {
+        font-size: 2.2rem !important;
+        line-height: 1.1 !important;
+    }
+
+    .heroSub {
+        font-size: 0.9rem !important;
+        max-width: 250px !important;
+    }
+
+    /* Content Wrapper Transition */
+    .contentWrapper {
+        padding: 40px 20px !important;
+        margin-top: -40px !important;
+        border-radius: 40px 40px 0 0 !important;
+    }
+
+    /* Clients List - Make it feel like an App */
+    .clientsList {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px !important;
+        padding: 0 !important;
+    }
+
+    .clientCard {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        padding: 20px !important;
+        gap: 15px !important;
+        border-radius: 25px !important;
+        width: 100% !important;
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.05) !important;
+    }
+
+    .clientIcon {
+        width: 50px !important;
+        height: 50px !important;
+        min-width: 50px !important;
+    }
+
+    .clientInfo {
+        width: 100% !important;
+        text-align: left !important;
+    }
+
+    .clientInfo h4 {
+        font-size: 1.2rem !important;
+        margin-bottom: 2px !important;
+    }
+
+    .clientInfo p {
+        font-size: 0.85rem !important;
+        opacity: 0.6 !important;
+    }
+
+    /* Badge & Action buttons on mobile */
+    .clientCard > div:last-child {
+        width: 100% !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding-top: 15px !important;
+        border-top: 1px solid rgba(223, 185, 109, 0.1) !important;
+        margin-top: 5px !important;
+    }
+
+    .customDropdown {
+        width: 100% !important;
+    }
+
+    .dropdownTrigger {
+        width: 100% !important;
+        justify-content: space-between !important;
+        padding: 10px 15px !important;
+        font-size: 0.85rem !important;
+        border-radius: 50px !important;
+    }
+
+    /* Fix the header layout on mobile */
+    .sectionHeader {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 20px !important;
+        margin-bottom: 30px !important;
+    }
+
+    .sectionHeader h2 {
+        font-size: 2rem !important;
+        text-align: left !important;
+    }
+
+    .headerLine {
+        margin: 0 !important;
+    }
+}
+
+/* --- POWERFUL MOBILE CLIENT VIEW --- */
+@media (max-width: 768px) {
+    .clientsList {
+        padding: 0 5px !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 20px !important;
+    }
+
+    .clientCard {
+        padding: 25px !important;
+        border-radius: 24px !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 20px !important;
+        background: white !important;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.05) !important;
+    }
+
+    .clientInfo {
+        width: 100% !important;
+        text-align: left !important;
+    }
+
+    .clientInfo h4 {
+        font-size: 1.3rem !important;
+        margin-bottom: 5px !important;
+    }
+
+    /* Stack Client Controls */
+    .clientCard > div:last-child {
+        width: 100% !important;
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 12px !important;
+        display: flex !important;
+    }
+
+    /* Style Tier & Role Selects for Mobile */
+    .clientCard select, 
+    .clientCard .luxuryOptionBtn {
+        width: 100% !important;
+        justify-content: center !important;
+        padding: 12px !important;
+        font-size: 0.9rem !important;
+        border-radius: 15px !important;
+    }
+
+    /* Fix the "Ajouter Client" button area */
+    .sectionHeader {
+        padding: 0 10px !important;
+        margin-bottom: 30px !important;
+    }
+
+    .btnSaveLux {
+        width: 100% !important;
+        padding: 15px !important;
+        border-radius: 20px !important;
+        justify-content: center !important;
+        font-size: 0.9rem !important;
+        letter-spacing: 1px !important;
+    }
+}
+
+@media (max-width: 768px) {
+    /* Target the controls container specifically */
+    .clientCard > div[style*="display: flex"] {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        width: 100% !important;
+        gap: 12px !important;
+    }
+
+    .customDropdown {
+        width: 100% !important;
+    }
+
+    .dropdownTrigger {
+        width: 100% !important;
+        justify-content: space-between !important;
+        min-width: unset !important;
+    }
+
+    /* Luxury Add Button for Mobile */
+    .sectionHeader .btnLux, 
+    .sectionHeader .btn-lux {
+        position: fixed !important;
+        bottom: 100px !important;
+        right: 20px !important;
+        z-index: 100 !important;
+        border-radius: 50px !important;
+        width: 60px !important;
+        height: 60px !important;
+        padding: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        box-shadow: 0 10px 30px rgba(223, 185, 109, 0.4) !important;
+        font-size: 0 !important; /* Hide text, keep icon */
+    }
+
+    .sectionHeader .btnLux svg, 
+    .sectionHeader .btn-lux svg {
+        margin: 0 !important;
+        width: 24px !important;
+        height: 24px !important;
+    }
+
+    /* Fix Title Positioning */
+    .sectionHeader {
+        display: block !important;
+        text-align: left !important;
+    }
+
+    .sectionHeader h2 {
+        font-size: 2rem !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .heroBanner {
+        height: 300px !important;
+        padding: 0 20px !important;
+        margin: 10px !important;
+        border-radius: 25px !important;
+    }
+
+    .welcomeText {
+        font-size: 2.2rem !important;
+        line-height: 1.1 !important;
+        margin-bottom: 10px !important;
+    }
+
+    .heroSub {
+        font-size: 0.9rem !important;
+        line-height: 1.4 !important;
+        opacity: 0.8 !important;
+    }
+
+    .tierBadge {
+        padding: 6px 12px !important;
+        font-size: 0.65rem !important;
+        margin-bottom: 15px !important;
+    }
+
+    /* Content Wrapper adjust for mobile */
+    .contentWrapper {
+        padding: 40px 20px !important;
+        border-radius: 40px 40px 0 0 !important;
+        margin-top: -40px !important;
+    }
+}
+
+/* ========================================================
+   CLIENTS PAGE — POWERFUL MOBILE APP VIEW
+   Consolidated final override — wins over all above
+======================================================== */
+@media (max-width: 768px) {
+    /* Section header: title left, add button below */
+    .clientsPageHeader {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 16px !important;
+        margin-bottom: 24px !important;
+    }
+
+    .clientsPageHeader h2 {
+        font-size: 2rem !important;
+    }
+
+    .clientsPageHeader .btn-lux,
+    .clientsPageHeader button {
+        width: 100% !important;
+        justify-content: center !important;
+        padding: 14px 20px !important;
+        border-radius: 18px !important;
+        font-size: 0.95rem !important;
+    }
+
+    /* List: single column, breathing gap */
+    .clientsList {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 16px !important;
+        padding: 0 0 120px 0 !important;
+    }
+
+    /* Card: vertical stack, app card feel */
+    .clientCard {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        padding: 18px !important;
+        gap: 0 !important;
+        border-radius: 24px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.06) !important;
+        background: #FFFDF9 !important;
+        overflow: hidden !important;
+    }
+
+    .clientCardGold {
+        background: linear-gradient(145deg, #C9973A 0%, #DFB96D 35%, #F0D080 60%, #C9973A 100%) !important;
+        box-shadow: 0 12px 35px rgba(184, 138, 68, 0.4) !important;
+    }
+
+    .clientCard:hover {
+        transform: none !important;
+    }
+
+    /* Top row: avatar + name in a flex row */
+    .clientCardTop {
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 14px !important;
+        width: 100% !important;
+        padding-bottom: 14px !important;
+        border-bottom: 1px solid rgba(223,185,109,0.12) !important;
+        margin-bottom: 14px !important;
+    }
+
+    .clientIcon {
+        width: 46px !important;
+        height: 46px !important;
+        min-width: 46px !important;
+        border-radius: 14px !important;
+        flex-shrink: 0 !important;
+    }
+
+    .clientInfo {
+        flex: 1 !important;
+        width: auto !important;
+        padding-bottom: 0 !important;
+        border-bottom: none !important;
+        margin-bottom: 0 !important;
+    }
+
+    .clientInfo h4 {
+        font-size: 1.15rem !important;
+        font-weight: 800 !important;
+        margin-bottom: 3px !important;
+        color: #1A0F0A !important;
+    }
+
+    .clientInfo p {
+        font-size: 0.82rem !important;
+        opacity: 0.6 !important;
+        word-break: break-all !important;
+    }
+
+    /* Actions area: 2x2 grid layout */
+    .clientCardActions {
+        width: 100% !important;
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 10px !important;
+        flex-wrap: unset !important;
+    }
+
+    /* Dropdowns span full grid cell */
+    .clientCardActions .customDropdown {
+        width: 100% !important;
+    }
+
+    .clientCardActions .dropdownTrigger {
+        width: 100% !important;
+        justify-content: space-between !important;
+        padding: 11px 14px !important;
+        font-size: 0.82rem !important;
+        border-radius: 14px !important;
+        min-width: unset !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+    }
+
+    /* Action buttons — fill their grid cell */
+    .clientCardActions .btnSaveLux,
+    .clientCardActions .btnCancel,
+    .clientCardActions .btnDeleteLux {
+        width: 100% !important;
+        min-width: unset !important;
+        padding: 11px 10px !important;
+        font-size: 0.8rem !important;
+        border-radius: 14px !important;
+        justify-content: center !important;
+        display: flex !important;
+        align-items: center !important;
+        gap: 6px !important;
+        text-align: center !important;
+    }
+
+    /* MESSAGERIE button (first child in actions) spans full row */
+    .clientCardActions > div:nth-child(1),
+    .clientCardActions > div:nth-child(2) {
+        grid-column: span 1 !important;
+    }
+
+    .clientCardActions > button:nth-child(3) {
+        grid-column: 1 / -1 !important;
+    }
+
+    /* Dropdown menus — don't overflow card */
+    .clientCardActions .dropdownMenu {
+        width: 100% !important;
+        left: 0 !important;
+        right: 0 !important;
+        z-index: 200 !important;
+    }
 }

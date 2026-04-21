@@ -53,7 +53,12 @@ import {
     Ticket,
     CreditCard,
     Percent,
-    PenLine
+    PenLine,
+    Phone,
+    RefreshCcw,
+    X,
+    Eye,
+    EyeOff,
 } from 'lucide-react';
 
 import { useQuery, useMutation } from '@apollo/client/react';
@@ -80,9 +85,13 @@ import {
     REGISTER_MUTATION,
     ADD_PRESTATAIRE_MUTATION,
     DELETE_SPECIALIST_MUTATION,
-    ADD_CLIENT_NOTE_MUTATION
+    DEDUCT_POINTS_MUTATION,
+    ADD_CLIENT_NOTE_MUTATION,
+    UPDATE_RESERVATION_DATE_MUTATION,
+    SYNC_GOOGLE_CALENDAR_MUTATION,
+    CONVERT_EXTERNAL_TO_RESERVATION_MUTATION
 } from '@/graphql/mutations';
-import { signOut } from 'next-auth/react';
+import { signOut, signIn } from 'next-auth/react';
 
 interface DashboardData {
     services: any[];
@@ -97,6 +106,16 @@ interface DashboardData {
     recommendations: any[];
     clients: any[];
     allReservations: any[];
+    externalEvents: any[];
+}
+
+interface ExternalEvent {
+    id: string;
+    google_event_id: string;
+    title: string;
+    startDate: string;
+    endDate: string;
+    reservationId?: number;
 }
 
 interface ProductsData {
@@ -113,6 +132,40 @@ interface FeedbackData {
     personnelEvaluations: any[];
 }
 
+const formatLocalDate = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const swalLux = (icon: 'success' | 'error' | 'warning' | 'info' | 'question', title: string, text?: string, options: any = {}) => {
+    return Swal.fire({
+        icon,
+        title,
+        text,
+        customClass: {
+            popup: styles.swalPopup,
+            title: styles.swalTitle,
+            htmlContainer: styles.swalText,
+            confirmButton: styles.swalConfirmButton,
+            cancelButton: styles.swalCancelButton,
+            input: styles.swalSelect
+        },
+        buttonsStyling: false,
+        confirmButtonText: 'OK',
+        background: '#1A0F0A',
+        color: '#ffffff',
+        didOpen: (popup) => {
+            // Force high z-index to stay above other modals on mobile
+            const container = Swal.getContainer();
+            if (container) container.style.zIndex = '3000';
+            if (options.didOpen) options.didOpen(popup);
+        },
+        ...options
+    });
+};
+
 export default function Dashboard() {
     const [mounted, setMounted] = useState(false);
     const [user, setUser] = useState<any>(null);
@@ -126,7 +179,10 @@ export default function Dashboard() {
     });
     const { data: feedbackData } = useQuery<FeedbackData>(GET_ALL_FEEDBACK, { skip: user?.role !== 'admin' });
     const [createReservation] = useMutation(CREATE_RESERVATION_MUTATION, {
-        refetchQueries: [{ query: GET_WAITING_DATA, variables: { userId: user?.id } }]
+        refetchQueries: [
+            { query: GET_WAITING_DATA, variables: { userId: user?.id } },
+            { query: GET_DASHBOARD_DATA, variables: { userId: user?.id } }
+        ]
     });
     const [addWaitingComment] = useMutation(ADD_WAITING_COMMENT_MUTATION);
     const [addTip] = useMutation(ADD_TIP_MUTATION);
@@ -147,10 +203,14 @@ export default function Dashboard() {
     const [updateProduct] = useMutation(UPDATE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [removeProduct] = useMutation(REMOVE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [updateReservationStatus] = useMutation(UPDATE_RESERVATION_STATUS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [updateReservationDate] = useMutation(UPDATE_RESERVATION_DATE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [updateSpecialist] = useMutation(UPDATE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [deleteSpecialist] = useMutation(DELETE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [deductPoints] = useMutation(DEDUCT_POINTS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [registerClient] = useMutation(REGISTER_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [addSpecialist] = useMutation(ADD_PRESTATAIRE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [syncGoogleCalendar] = useMutation(SYNC_GOOGLE_CALENDAR_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [convertExternalToReservation] = useMutation(CONVERT_EXTERNAL_TO_RESERVATION_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
 
     const router = useRouter();
     const [activeTab, setActiveTab] = useState('overview');
@@ -159,6 +219,7 @@ export default function Dashboard() {
     const [cart, setCart] = useState<any[]>([]);
     const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
     const [openTierDropdownId, setOpenTierDropdownId] = useState<string | null>(null);
+    const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null);
     const [isCartModalOpen, setIsCartModalOpen] = useState(false);
     const [selectedDayLine, setSelectedDayLine] = useState<string>('');
     const [selectedTimeLine, setSelectedTimeLine] = useState<string>('');
@@ -173,6 +234,9 @@ export default function Dashboard() {
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [selectedReservationForPayment, setSelectedReservationForPayment] = useState<any>(null);
     const [paymentModeLine, setPaymentModeLine] = useState('');
+    const [pointsToDeduct, setPointsToDeduct] = useState<string>('');
+    const [usePointsCombo, setUsePointsCombo] = useState(false);
+    const [secondaryPaymentMode, setSecondaryPaymentMode] = useState('');
     const [isAddServiceModalOpen, setIsAddServiceModalOpen] = useState(false);
     const [newService, setNewService] = useState({ name: '', description: '', price: '', image: '', duration: '' });
     const [isEditClientModalOpen, setIsEditClientModalOpen] = useState(false);
@@ -188,8 +252,8 @@ export default function Dashboard() {
     const [agendaSearch, setAgendaSearch] = useState('');
     const [agendaServiceFilter, setAgendaServiceFilter] = useState('');
     const [revenueDateRange, setRevenueDateRange] = useState({
-        start: new Date().toISOString().split('T')[0],
-        end: new Date().toISOString().split('T')[0]
+        start: formatLocalDate(new Date()),
+        end: formatLocalDate(new Date())
     });
     const [selectedClientForDetails, setSelectedClientForDetails] = useState<any>(null);
     const [isUploading, setIsUploading] = useState(false);
@@ -229,7 +293,7 @@ export default function Dashboard() {
 
         // Check file size (optional but recommended for base64 in DB)
         if (file.size > 2 * 1024 * 1024) {
-            Swal.fire({ title: 'Fichier trop volumineux', text: 'Veuillez choisir une image de moins de 2 Mo.', icon: 'warning', confirmButtonColor: '#DFB96D' });
+            swalLux('warning', 'Fichier trop volumineux', 'Veuillez choisir une image de moins de 2 Mo.');
             return;
         }
 
@@ -258,7 +322,7 @@ export default function Dashboard() {
         };
         reader.onerror = () => {
             console.error('FileReader error');
-            alert('Error reading file');
+            swalLux('error', 'Erreur', 'Erreur lors de la lecture du fichier');
             setIsUploading(false);
         };
         reader.readAsDataURL(file);
@@ -316,16 +380,29 @@ export default function Dashboard() {
     };
 
     const getTodaysAgenda = () => {
-        if (!data?.allReservations) return [];
-        const now = new Date();
-        return data.allReservations.filter((r: any) => {
-            if (!r.date) return false;
-            const d = new Date(r.date);
-            if (isNaN(d.getTime())) return false;
-            return d.getDate() === now.getDate() &&
-                d.getMonth() === now.getMonth() &&
-                d.getFullYear() === now.getFullYear();
-        }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        const today = formatLocalDate(new Date());
+        
+        const internal = (data?.allReservations || []).filter((res: any) => {
+            const dateObj = new Date(res.date);
+            if (isNaN(dateObj.getTime())) return false;
+            return formatLocalDate(dateObj) === today;
+        }).map(r => ({ ...r, type: 'internal' }));
+
+        const external = (data?.externalEvents || []).filter((event: any) => {
+            if (event.reservationId) return false; // Already converted
+            const dateObj = new Date(event.startDate);
+            if (isNaN(dateObj.getTime())) return false;
+            return formatLocalDate(dateObj) === today;
+        }).map(e => ({
+            id: e.id,
+            date: e.startDate,
+            title: e.title,
+            status: 'external',
+            type: 'external',
+            raw: e
+        }));
+
+        return [...internal, ...external].sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
     };
 
     const getUpcomingBirthdays = () => {
@@ -367,7 +444,7 @@ export default function Dashboard() {
             if (!r.date) return false;
             const dateObj = new Date(r.date);
             if (isNaN(dateObj.getTime())) return false;
-            const d = dateObj.toISOString().split('T')[0];
+            const d = formatLocalDate(dateObj);
             return r.status === 'confirmed' && d >= revenueDateRange.start && d <= revenueDateRange.end;
         });
 
@@ -388,7 +465,7 @@ export default function Dashboard() {
             if (!r.date) return false;
             const dateObj = new Date(r.date);
             if (isNaN(dateObj.getTime())) return false;
-            const d = dateObj.toISOString().split('T')[0];
+            const d = formatLocalDate(dateObj);
             return r.status === 'confirmed' && d >= revenueDateRange.start && d <= revenueDateRange.end;
         });
 
@@ -421,9 +498,260 @@ export default function Dashboard() {
         setSelectedClientForFiche(null);
     };
 
+    const handleSync = async () => {
+        try {
+            await syncGoogleCalendar();
+            swalLux('success', 'Synchronisé !', 'Votre calendrier Google a été mis à jour.');
+        } catch (err) {
+            console.error(err);
+            swalLux('error', 'Erreur', 'Impossible de synchroniser le calendrier.');
+        }
+    };
+
+    const handleConvertEvent = async (event: ExternalEvent) => {
+        const { value: formValues } = await Swal.fire({
+            title: `<span style="font-family: 'Playfair Display', serif; font-size: 1.8rem; color: #1a1a1a;">Planifier l'événement</span>`,
+            html: `
+                <div style="padding: 10px 0; text-align: left; font-family: 'Outfit', sans-serif; min-height: 400px;">
+                    <p style="color: #888; margin-bottom: 25px; font-size: 0.9rem;">Configurez les détails pour : <strong>"${event.title}"</strong></p>
+                    
+                    <!-- CUSTOM SELECT: CLIENT -->
+                    <div style="margin-bottom: 25px; position: relative;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #666; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">Client</label>
+                        <div id="custom-select-client" style="width: 100%; padding: 15px; border-radius: 12px; border: 1.5px solid #eee; background: #fff; font-size: 0.95rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
+                            <span id="selected-client-text">Choisir un client...</span>
+                            <span style="color: #DFB96D; font-size: 0.8rem;">▼</span>
+                        </div>
+                        <input type="hidden" id="swal-client" value="">
+                        <div id="dropdown-client" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 1000; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #eee; margin-top: 5px; max-height: 200px; overflow-y: auto; padding: 10px;">
+                            <input type="text" id="search-client" placeholder="Rechercher un client..." style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #eee; margin-bottom: 10px; outline: none; font-size: 0.85rem;">
+                            <div id="list-client">
+                                ${data?.clients.map(c => `<div class="dropdown-item" data-id="${c.id}" data-name="${c.name}" style="padding: 10px 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; color: #444;">${c.name} <small style="color: #999; margin-left: 5px;">(${c.email})</small></div>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CUSTOM SELECT: SERVICE -->
+                    <div style="margin-bottom: 25px; position: relative;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #666; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">Service</label>
+                        <div id="custom-select-service" style="width: 100%; padding: 15px; border-radius: 12px; border: 1.5px solid #eee; background: #fff; font-size: 0.95rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
+                            <span id="selected-service-text">Choisir un service...</span>
+                            <span style="color: #DFB96D; font-size: 0.8rem;">▼</span>
+                        </div>
+                        <input type="hidden" id="swal-service" value="">
+                        <div id="dropdown-service" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 999; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #eee; margin-top: 5px; max-height: 200px; overflow-y: auto; padding: 10px;">
+                            <div id="list-service">
+                                ${data?.services.map(s => `<div class="dropdown-item" data-id="${s.id}" data-name="${s.name}" style="padding: 10px 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; color: #444;">${s.name} <span style="float: right; color: #DFB96D; font-weight: 600;">${s.price} DT</span></div>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- CUSTOM SELECT: PRESTATAIRE -->
+                    <div style="margin-bottom: 10px; position: relative;">
+                        <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #666; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px;">Spécialiste</label>
+                        <div id="custom-select-specialist" style="width: 100%; padding: 15px; border-radius: 12px; border: 1.5px solid #eee; background: #fff; font-size: 0.95rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s;">
+                            <span id="selected-specialist-text">Choisir un spécialiste...</span>
+                            <span style="color: #DFB96D; font-size: 0.8rem;">▼</span>
+                        </div>
+                        <input type="hidden" id="swal-specialist" value="">
+                        <div id="dropdown-specialist" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 998; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #eee; margin-top: 5px; max-height: 200px; overflow-y: auto; padding: 10px;">
+                            <div id="list-specialist">
+                                ${data?.prestataires.map(p => `<div class="dropdown-item" data-id="${p.id}" data-name="${p.name}" style="padding: 10px 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; color: #444;">${p.name}</div>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `,
+            background: '#ffffff',
+            padding: '2.5rem',
+            showCancelButton: true,
+            confirmButtonText: 'Enregistrer la Réservation',
+            cancelButtonText: 'Annuler',
+            confirmButtonColor: '#DFB96D',
+            cancelButtonColor: '#f8f9fa',
+            preConfirm: () => {
+                const clientId = (document.getElementById('swal-client') as HTMLInputElement).value;
+                const serviceId = (document.getElementById('swal-service') as HTMLInputElement).value;
+                const specialistId = (document.getElementById('swal-specialist') as HTMLInputElement).value;
+                if (!clientId || !serviceId || !specialistId) {
+                    Swal.showValidationMessage('Veuillez sélectionner tous les champs');
+                    return false;
+                }
+                return { clientId, serviceId, specialistId };
+            },
+            didOpen: () => {
+                const popup = Swal.getPopup();
+                if (popup) popup.style.borderRadius = '28px';
+
+                const setupDropdown = (id: string) => {
+                    const select = document.getElementById(`custom-select-${id}`);
+                    const dropdown = document.getElementById(`dropdown-${id}`);
+                    const list = document.getElementById(`list-${id}`);
+                    const input = document.getElementById(`swal-${id}`) as HTMLInputElement;
+                    const text = document.getElementById(`selected-${id}-text`);
+                    const searchInput = document.getElementById(`search-${id}`) as HTMLInputElement;
+
+                    if (!select || !dropdown || !list || !input || !text) return;
+
+                    select.onclick = () => {
+                        const isOpen = dropdown.style.display === 'block';
+                        // Close others
+                        ['client', 'service', 'specialist'].forEach(key => {
+                            const d = document.getElementById(`dropdown-${key}`);
+                            if (d) d.style.display = 'none';
+                        });
+                        dropdown.style.display = isOpen ? 'none' : 'block';
+                        if (!isOpen) select.style.borderColor = '#DFB96D';
+                    };
+
+                    const items = list.querySelectorAll('.dropdown-item');
+                    items.forEach((item: any) => {
+                        item.onmouseover = () => { item.style.background = 'rgba(223, 185, 109, 0.08)'; item.style.color = '#DFB96D'; };
+                        item.onmouseout = () => { item.style.background = 'transparent'; item.style.color = '#444'; };
+                        item.onclick = () => {
+                            input.value = item.dataset.id;
+                            text.innerText = item.dataset.name;
+                            text.style.color = '#1a1a1a';
+                            text.style.fontWeight = '600';
+                            dropdown.style.display = 'none';
+                            select.style.borderColor = '#eee';
+                        };
+                    });
+
+                    if (searchInput) {
+                        searchInput.oninput = (e: any) => {
+                            const val = e.target.value.toLowerCase();
+                            items.forEach((item: any) => {
+                                const name = item.dataset.name.toLowerCase();
+                                item.style.display = name.includes(val) ? 'block' : 'none';
+                            });
+                        };
+                    }
+                };
+
+                ['client', 'service', 'specialist'].forEach(setupDropdown);
+
+                // Style buttons
+                const confirmBtn = Swal.getConfirmButton();
+                if (confirmBtn) {
+                    confirmBtn.style.borderRadius = '35px';
+                    confirmBtn.style.padding = '18px 40px';
+                    confirmBtn.style.fontWeight = '700';
+                    confirmBtn.style.boxShadow = '0 10px 25px rgba(223, 185, 109, 0.3)';
+                }
+                const cancelBtn = Swal.getCancelButton();
+                if (cancelBtn) {
+                    cancelBtn.style.borderRadius = '35px';
+                    cancelBtn.style.padding = '18px 40px';
+                    cancelBtn.style.color = '#999';
+                }
+            }
+        });
+
+        if (formValues) {
+            try {
+                await convertExternalToReservation({
+                    variables: {
+                        externalId: event.id,
+                        userId: formValues.clientId,
+                        serviceId: formValues.serviceId,
+                        prestataireId: formValues.specialistId
+                    }
+                });
+                swalLux('success', 'Converti !', 'L\'événement a été transformé en réservation.');
+            } catch (err) {
+                console.error(err);
+                swalLux('error', 'Erreur', 'Impossible de convertir l\'événement.');
+            }
+        }
+    };
+
     const handleLogout = async () => {
         localStorage.clear();
         await signOut({ callbackUrl: '/' });
+    };
+
+    const handleStatusChange = async (resId: string, currentStatus: string) => {
+        swalLux('question', 'Modifier le statut', 'Choisissez le nouveau statut du rendez-vous', {
+            html: `
+                <div class="${styles.statusSelectionGrid}">
+                    <button id="btn-pending" class="${styles.statusOptionBtn} ${styles.pending}">
+                        <span>⏳</span> En attente
+                    </button>
+                    <button id="btn-confirmed" class="${styles.statusOptionBtn} ${styles.confirmed}">
+                        <span>✅</span> Accepté
+                    </button>
+                    <button id="btn-cancelled" class="${styles.statusOptionBtn} ${styles.cancelled}">
+                        <span>❌</span> Annulé
+                    </button>
+                </div>
+            `,
+            showConfirmButton: false,
+            showCancelButton: true,
+            cancelButtonText: 'Fermer',
+            didOpen: () => {
+                const popup = Swal.getPopup();
+                if (!popup) return;
+
+                const updateStatus = async (status: string) => {
+                    Swal.showLoading();
+                    try {
+                        await updateReservationStatus({ variables: { id: resId, status } });
+                        Swal.close();
+                        swalLux('success', 'Mis à jour', 'Le statut a été mis à jour avec succès.');
+                    } catch (e) {
+                        console.error(e);
+                        swalLux('error', 'Erreur', 'Impossible de mettre à jour le statut');
+                    }
+                };
+
+                popup.querySelector('#btn-pending')?.addEventListener('click', () => updateStatus('pending'));
+                popup.querySelector('#btn-confirmed')?.addEventListener('click', () => updateStatus('confirmed'));
+                popup.querySelector('#btn-cancelled')?.addEventListener('click', () => updateStatus('cancelled'));
+            }
+        });
+    };
+
+    const handleTimeChange = async (resId: string, currentDate: string) => {
+        const currentD = new Date(currentDate);
+        const availableHours = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
+        
+        swalLux('question', 'Modifier l\'heure', `Sélectionnez une nouvelle heure pour cette séance`, {
+            html: `
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
+                    ${availableHours.map(h => `
+                        <button id="time-${h.replace(':', '-')}" class="${styles.statusOptionBtn}" style="padding: 12px; border-radius: 30px; font-size: 1rem; ${(h === `${currentD.getHours()}:00` || h === `${currentD.getHours().toString().padStart(2, '0')}:00`) ? 'border-color: #DFB96D; background: rgba(223, 185, 109, 0.1); font-weight: bold;' : ''}">
+                            🕒 ${h}
+                        </button>
+                    `).join('')}
+                </div>
+            `,
+            showConfirmButton: false,
+            showCancelButton: true,
+            cancelButtonText: 'Fermer',
+            didOpen: () => {
+                const popup = Swal.getPopup();
+                if (!popup) return;
+                availableHours.forEach(h => {
+                    const safeId = h.replace(':', '-');
+                    popup.querySelector(`#time-${safeId}`)?.addEventListener('click', async () => {
+                        const [hh] = h.split(':').map(Number);
+                        const newDate = new Date(currentD);
+                        newDate.setHours(hh, 0, 0, 0);
+                        
+                        Swal.showLoading();
+                        try {
+                            await updateReservationDate({ variables: { id: resId, date: newDate.toISOString() } });
+                            Swal.close();
+                            swalLux('success', 'Mis à jour', 'L\'heure du rendez-vous a été modifiée.');
+                        } catch (e) {
+                            console.error(e);
+                            swalLux('error', 'Erreur', 'Impossible de modifier l\'heure.');
+                        }
+                    });
+                });
+            }
+        });
     };
 
     useEffect(() => {
@@ -441,6 +769,12 @@ export default function Dashboard() {
             setUser(JSON.parse(storedUser));
         }
     }, []);
+
+    useEffect(() => {
+        if (mounted && user?.role === 'admin') {
+            syncGoogleCalendar();
+        }
+    }, [mounted, user]);
 
     // SSE: real-time unread message badges
     useEffect(() => {
@@ -791,38 +1125,129 @@ export default function Dashboard() {
                                         {/* Admin Intel: Today's Agenda & Insights */}
                                         <div className={styles.adminIntelRow}>
                                             <div className={styles.intelCard} onClick={() => setIsAgendaModalOpen(true)} style={{ cursor: 'pointer' }}>
-                                                <div className={styles.intelHeader}>
-                                                    <Calendar size={20} color="var(--accent)" />
-                                                    <h3>Agenda du Jour</h3>
-                                                    <div className={styles.pulseIndicator}>LIVE</div>
+                                                <div className={styles.intelHeader} style={{ marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                        <Calendar size={20} color="#DFB96D" />
+                                                        <h3 style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: '1.4rem' }}>Agenda du Jour</h3>
+                                                        <div style={{ 
+                                                            background: 'rgba(255, 71, 87, 0.1)', 
+                                                            color: '#ff4757', 
+                                                            fontSize: '0.65rem', 
+                                                            padding: '4px 10px', 
+                                                            borderRadius: '20px', 
+                                                            fontWeight: 'bold',
+                                                            letterSpacing: '1px'
+                                                        }}>LIVE</div>
+                                                    </div>
+                                                    <button 
+                                                        onClick={handleSync}
+                                                        className={styles.googleSyncBtnLux}
+                                                        style={{
+                                                            background: 'white',
+                                                            border: '1px solid #eee',
+                                                            padding: '8px 18px',
+                                                            borderRadius: '30px',
+                                                            fontSize: '0.8rem',
+                                                            fontWeight: '600',
+                                                            color: '#333',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '8px',
+                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                                                            transition: 'all 0.3s ease'
+                                                        }}
+                                                    >
+                                                        <RefreshCcw size={14} color="#DFB96D" />
+                                                        <span>Synchroniser</span>
+                                                    </button>
                                                 </div>
                                                 <div className={styles.intelList}>
                                                     {getTodaysAgenda().slice(0, 3).map((res: any) => (
-                                                        <div key={res.id} className={styles.intelItem}>
-                                                            <div className={styles.intelTime}>
+                                                        <div key={res.id} className={styles.intelItem} style={res.type === 'external' ? {
+                                                            background: 'linear-gradient(135deg, rgba(223, 185, 109, 0.03) 0%, rgba(223, 185, 109, 0.08) 100%)',
+                                                            border: '1px solid rgba(223, 185, 109, 0.2)',
+                                                            borderRadius: '16px',
+                                                            padding: '15px',
+                                                            marginBottom: '10px'
+                                                        } : {}}>
+                                                            <div 
+                                                                className={styles.intelTime}
+                                                                onClick={() => user?.role === 'admin' && handleTimeChange(res.id, res.date)}
+                                                                style={{ 
+                                                                    cursor: user?.role === 'admin' ? 'pointer' : 'default',
+                                                                    color: res.type === 'external' ? '#DFB96D' : 'inherit',
+                                                                    fontWeight: res.type === 'external' ? 'bold' : 'normal'
+                                                                }}
+                                                            >
                                                                 {new Date(res.date).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
                                                             </div>
                                                             <div className={styles.intelDetails}>
                                                                 <div className={styles.serviceClientInfo}>
-                                                                    <strong>{res.service?.name || 'Service Inconnu'}</strong>
-                                                                    <span className={styles.clientSub}>{res.user?.name || 'Client Anonyme'}</span>
+                                                                    <strong style={{ fontSize: '0.95rem', color: '#1a1a1a' }}>{res.type === 'external' ? res.title : (res.externalTitle || res.service?.name || 'Service Inconnu')}</strong>
+                                                                    <span className={styles.clientSub} style={{ fontSize: '0.75rem', color: '#999' }}>{res.type === 'external' ? 'Importé de Google' : (res.user?.name || 'Client Anonyme')}</span>
                                                                 </div>
                                                                 <div className={styles.specialistBadge}>
-                                                                    {res.prestataire?.name && (
+                                                                    {res.type === 'external' ? (
+                                                                        <span style={{ 
+                                                                            background: 'rgba(223, 185, 109, 0.1)', 
+                                                                            color: '#DFB96D', 
+                                                                            fontSize: '0.6rem', 
+                                                                            padding: '2px 8px', 
+                                                                            borderRadius: '4px',
+                                                                            textTransform: 'uppercase',
+                                                                            fontWeight: 'bold'
+                                                                        }}>Non Planifié</span>
+                                                                    ) : res.prestataire?.name && (
                                                                         <>
-                                                                            <UserCheck size={12} />
+                                                                            <UserCheck size={12} color="#DFB96D" />
                                                                             <span>{res.prestataire.name}</span>
                                                                         </>
                                                                     )}
                                                                 </div>
                                                             </div>
                                                             <div className={styles.agendaActions}>
-                                                                <button className={styles.checkBtn} title="Check-in">
-                                                                    <UserCheck size={14} />
-                                                                </button>
-                                                                <div className={`${styles.intelStatus} ${styles[res.status]}`}>
-                                                                    {res.status}
-                                                                </div>
+                                                                {res.type === 'external' ? (
+                                                                    <button 
+                                                                        className={styles.convertBtnLux} 
+                                                                        style={{ 
+                                                                            padding: '6px 15px', 
+                                                                            fontSize: '0.7rem', 
+                                                                            background: '#DFB96D', 
+                                                                            color: 'white',
+                                                                            borderRadius: '20px',
+                                                                            border: 'none',
+                                                                            fontWeight: '700',
+                                                                            cursor: 'pointer',
+                                                                            boxShadow: '0 4px 10px rgba(223, 185, 109, 0.3)',
+                                                                            transition: 'all 0.3s ease'
+                                                                        }}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            handleConvertEvent(res.raw);
+                                                                        }}
+                                                                    >
+                                                                        PLANIFIER
+                                                                    </button>
+                                                                ) : (
+                                                                    <>
+                                                                        <div 
+                                                                            className={`${styles.intelStatus} ${styles[res.status]}`} 
+                                                                            style={{ 
+                                                                                cursor: user?.role === 'admin' ? 'pointer' : 'default',
+                                                                                padding: '4px 12px',
+                                                                                borderRadius: '20px',
+                                                                                fontSize: '0.65rem',
+                                                                                fontWeight: '800'
+                                                                            }}
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
+                                                                                if (user?.role === 'admin') handleStatusChange(res.id, res.status);
+                                                                            }}
+                                                                        >
+                                                                            {res.status?.toUpperCase()}
+                                                                        </div>
+                                                                    </>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     ))}
@@ -1026,7 +1451,7 @@ export default function Dashboard() {
                                                         const code = (document.getElementById('refInput') as HTMLInputElement).value;
                                                         if (code) {
                                                             await applyReferral({ variables: { userId: user?.id, code } });
-                                                            alert("Code applied!");
+                                                            swalLux('success', 'Code appliqué !');
                                                         }
                                                     }}>{t('apply')}</button>
                                                 </div>
@@ -1199,24 +1624,19 @@ export default function Dashboard() {
                                                                     style={{ background: 'rgba(239, 68, 68, 0.1)' }}
                                                                     onClick={async (e) => {
                                                                         e.stopPropagation();
-                                                                        const result = await Swal.fire({
-                                                                            title: 'Êtes-vous sûr ?',
-                                                                            text: "Vous ne pourrez pas revenir en arrière !",
-                                                                            icon: 'warning',
+                                                                        const result = await swalLux('warning', 'Êtes-vous sûr ?', 'Vous ne pourrez pas revenir en arrière !', {
                                                                             showCancelButton: true,
-                                                                            confirmButtonColor: '#DFB96D',
-                                                                            cancelButtonColor: '#d33',
                                                                             confirmButtonText: 'Oui, supprimer !',
                                                                             cancelButtonText: 'Annuler'
                                                                         });
-
+ 
                                                                         if (result.isConfirmed) {
                                                                             try {
                                                                                 await deleteSpecialist({ variables: { id: staff.id } });
-                                                                                Swal.fire('Supprimé !', 'Le spécialiste a été supprimé.', 'success');
+                                                                                swalLux('success', 'Supprimé !', 'Le spécialiste a été supprimé.');
                                                                             } catch (error) {
                                                                                 console.error(error);
-                                                                                Swal.fire('Erreur', "Une erreur est survenue lors de la suppression.", 'error');
+                                                                                swalLux('error', 'Erreur', "Une erreur est survenue lors de la suppression.");
                                                                             }
                                                                         }
                                                                     }}
@@ -1280,7 +1700,7 @@ export default function Dashboard() {
                                                                 const amount = prompt(t('tipAmount'));
                                                                 if (amount) {
                                                                     await addTip({ variables: { userId: user?.id, prestataireId: staff?.id, amount: parseFloat(amount) } });
-                                                                    alert(t('tipSent'));
+                                                                    swalLux('success', t('tipSent'));
                                                                 }
                                                             }}
                                                         >
@@ -1308,37 +1728,134 @@ export default function Dashboard() {
                                     <div className={styles.headerLine} />
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
-                                    <div className={styles.card}>
-                                        <h3>{t('currentQueue')}</h3>
-                                        <p className="text-gold">{t('estWait')}: 15 mins</p>
-                                        <div style={{ marginTop: '1rem', maxHeight: '300px', overflowY: 'auto' }}>
-                                            {waitingData?.waitingComments?.map((c: any) => (
-                                                <div key={c.id} style={{ padding: '10px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                                                    <strong style={{ color: '#DFB96D' }}>{c.user.name}</strong>
-                                                    <p style={{ margin: 0, fontSize: '0.9rem' }}>{c.comment}</p>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
+                                {(() => {
+                                    const todayStr = formatLocalDate(new Date());
+                                    const todayRes = waitingData?.myReservations?.filter((r: any) => {
+                                        try {
+                                            // Robust date parsing for both ISO strings and numeric timestamps
+                                            const rawDate = r.date;
+                                            const d = new Date(rawDate.includes('-') || rawDate.includes('T') ? rawDate : parseInt(rawDate));
+                                            return formatLocalDate(d) === todayStr;
+                                        } catch (e) { return false; }
+                                    });
 
-                                    <div className={styles.card}>
-                                        <h3>{t('joinConversation')}</h3>
-                                        <textarea
-                                            placeholder={t('shareThought')}
-                                            value={waitingComment}
-                                            onChange={(e) => setWaitingComment(e.target.value)}
-                                            className={styles.modalTextarea}
-                                            style={{ height: '100px', marginTop: '1rem' }}
-                                        />
-                                        <button className="btn-lux" style={{ marginTop: '1rem', width: '100%' }} onClick={async () => {
-                                            if (!waitingComment) return;
-                                            await addWaitingComment({ variables: { userId: user?.id, comment: waitingComment } });
-                                            setWaitingComment('');
-                                            window.location.reload(); // Quick refresh for demo
-                                        }}>{t('post')}</button>
-                                    </div>
-                                </div>
+                                    if (todayRes && todayRes.length > 0) {
+                                        return (
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '30px' }}>
+                                                {todayRes.sort((a: any, b: any) => {
+                                                    const da = new Date(a.date.includes('-') ? a.date : parseInt(a.date));
+                                                    const db = new Date(b.date.includes('-') ? b.date : parseInt(b.date));
+                                                    return da.getTime() - db.getTime();
+                                                }).map((r: any) => (
+                                                    <motion.div
+                                                        key={r.id}
+                                                        initial={{ y: 20, opacity: 0 }}
+                                                        animate={{ y: 0, opacity: 1 }}
+                                                        className={styles.card}
+                                                        style={{
+                                                            background: 'linear-gradient(135deg, #ffffff 0%, #fdfbf7 100%)',
+                                                            border: '1px solid #DFB96D',
+                                                            padding: '40px',
+                                                            borderRadius: '30px',
+                                                            boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
+                                                            textAlign: 'center',
+                                                            position: 'relative',
+                                                            overflow: 'hidden'
+                                                        }}
+                                                    >
+                                                        <div style={{ position: 'absolute', top: 0, right: 0, padding: '15px 30px', background: r.status === 'confirmed' ? '#D1FAE5' : '#FEF3C7', color: r.status === 'confirmed' ? '#065F46' : '#92400E', borderRadius: '0 0 0 30px', fontWeight: '800', letterSpacing: '1px', fontSize: '0.8rem' }}>
+                                                            {r.status === 'confirmed' ? 'CONFIRMÉ' : 'EN ATTENTE'}
+                                                        </div>
+
+                                                        <div style={{ margin: '0 auto 25px', width: '100px', height: '100px', borderRadius: '50%', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem', boxShadow: 'inset 0 0 20px rgba(223, 185, 109, 0.2)' }}>
+                                                            {r.service.name.toLowerCase().includes('massage') ? '💆‍♀️' : '✨'}
+                                                        </div>
+
+                                                        <h2 style={{ fontSize: '2.5rem', marginBottom: '10px', color: 'var(--primary)' }}>{r.service.name}</h2>
+                                                        <div style={{ fontSize: '1.2rem', color: '#DFB96D', fontWeight: '600', marginBottom: '30px' }}>
+                                                            {new Date(r.date.includes('-') ? r.date : parseInt(r.date)).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
+                                                        </div>
+
+                                                        <div style={{ display: 'flex', justifyContent: 'center', gap: '40px', alignItems: 'center', paddingTop: '30px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
+                                                            <div style={{ textAlign: 'left' }}>
+                                                                <div style={{ fontSize: '0.8rem', color: '#999', textTransform: 'uppercase', letterSpacing: '1px' }}>Praticien</div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
+                                                                    <img src={r.prestataire.image} style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid #DFB96D' }} />
+                                                                    <span style={{ fontWeight: '700' }}>{r.prestataire.name}</span>
+                                                                </div>
+                                                            </div>
+                                                            <div style={{ textAlign: 'left' }}>
+                                                                <div style={{ fontSize: '0.8rem', color: '#999', textTransform: 'uppercase', letterSpacing: '1px' }}>Durée Est.</div>
+                                                                <div style={{ fontWeight: '700', marginTop: '5px', fontSize: '1.1rem' }}>{r.service.duration || '60 mins'}</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'center', gap: '20px' }}>
+                                                            <button className="btn-lux" style={{ padding: '15px 40px', fontSize: '1rem' }} onClick={() => swalLux('info', 'Arrivée', 'Veuillez vous présenter à la réception à votre arrivée.')}>
+                                                                SIGNALER MON ARRIVÉE
+                                                            </button>
+                                                            <a href="tel:+21671000000" className="btn-lux" style={{ 
+                                                                padding: '15px 40px', 
+                                                                fontSize: '1rem', 
+                                                                background: 'transparent', 
+                                                                border: '1px solid #DFB96D', 
+                                                                color: '#DFB96D', 
+                                                                textDecoration: 'none', 
+                                                                display: 'inline-flex', 
+                                                                alignItems: 'center', 
+                                                                gap: '10px' 
+                                                            }}>
+                                                                <Phone size={18} /> APPELEZ
+                                                            </a>
+                                                            {r.status === 'pending' && (
+                                                                <button 
+                                                                    className="btn-lux" 
+                                                                    style={{ 
+                                                                        padding: '15px 40px', 
+                                                                        fontSize: '1rem', 
+                                                                        background: 'rgba(255, 68, 68, 0.1)', 
+                                                                        border: '1px solid #ff4444', 
+                                                                        color: '#ff4444' 
+                                                                    }}
+                                                                    onClick={async () => {
+                                                                        Swal.fire({
+                                                                            title: 'Annuler la séance ?',
+                                                                            text: 'Voulez-vous vraiment annuler votre rendez-vous ?',
+                                                                            icon: 'warning',
+                                                                            showCancelButton: true,
+                                                                            confirmButtonColor: '#ff4444',
+                                                                            cancelButtonColor: '#DFB96D',
+                                                                            confirmButtonText: 'Oui, annuler',
+                                                                            cancelButtonText: 'Non, garder',
+                                                                            background: '#F8F5F0',
+                                                                            color: '#433422',
+                                                                        }).then(async (result) => {
+                                                                            if (result.isConfirmed) {
+                                                                                await deleteReservation({ variables: { id: r.id } });
+                                                                                swalLux('success', 'Rendez-vous annulé');
+                                                                            }
+                                                                        });
+                                                                    }}
+                                                                >
+                                                                    ANNULER
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </motion.div>
+                                                ))}
+                                            </div>
+                                        );
+                                    }
+
+                                    return (
+                                        <div className={styles.card} style={{ textAlign: 'center', padding: '100px 20px' }}>
+                                            <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🗓️</div>
+                                            <h3 style={{ fontSize: '1.8rem' }}>Aucune séance prévue aujourd'hui</h3>
+                                            <p style={{ color: '#888', maxWidth: '400px', margin: '20px auto' }}>Vous n'avez pas de rendez-vous pour cette journée. Envie d'une pause bien-être ?</p>
+                                            <button className="btn-lux" onClick={() => setActiveTab('services')}>RÉSERVER UNE SÉANCE</button>
+                                        </div>
+                                    );
+                                })()}
                             </motion.div>
                         )}
 
@@ -1406,7 +1923,7 @@ export default function Dashboard() {
                                                 ) : (
                                                     <button className="btn-lux" style={{ width: '100%', marginTop: '10px' }} onClick={() => {
                                                         setCart([...cart, prod]);
-                                                        alert(`${t('addedToCart')}: ${prod.name}`);
+                                                        swalLux('success', t('addedToCart'), prod.name);
                                                     }}>
                                                         {t('addToCart')} <Gift size={16} />
                                                     </button>
@@ -1463,7 +1980,7 @@ export default function Dashboard() {
                                 className={styles.tabContent}
                             >
                                 <section className={styles.section}>
-                                    <div className={styles.sectionHeader} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div className={`${styles.sectionHeader} ${styles.clientsPageHeader} clients-page-header`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                         <div>
                                             <h2>{t('clients')}</h2>
                                             <div className={styles.headerLine} />
@@ -1477,27 +1994,56 @@ export default function Dashboard() {
                                             data.clients.map((client: any) => (
                                                 <div
                                                     key={client.id}
-                                                    className={`${styles.clientCard} ${openDropdownId === client.id ? styles.clientCardActive : ''}`}
+                                                    className={`${styles.clientCard} ${openDropdownId === client.id ? styles.clientCardActive : ''} ${client.tier === 'Membre Gold' ? styles.clientCardGold : ''}`}
                                                 >
-                                                    <div className={styles.clientIcon} style={{ overflow: 'hidden', width: '45px', height: '45px', border: '1px solid rgba(223, 185, 109, 0.2)' }}>
-                                                        {client.image ? (
-                                                            <img src={client.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                        ) : (
-                                                            <Users size={20} />
-                                                        )}
+                                                    <div className={styles.clientCardTop}>
+                                                        <div className={styles.clientIcon} style={{ overflow: 'hidden', width: '45px', height: '45px', border: '1px solid rgba(223, 185, 109, 0.2)' }}>
+                                                            {client.image ? (
+                                                                <img src={client.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                            ) : (
+                                                                <Users size={20} />
+                                                            )}
+                                                        </div>
+                                                        <div className={styles.clientInfo}>
+                                                            <h4
+                                                                style={{ cursor: 'pointer' }}
+                                                                onClick={() => {
+                                                                    setSelectedClientForFiche({ ...client });
+                                                                    setIsFicheModalOpen(true);
+                                                                }}
+                                                            >
+                                                                {client.name}
+                                                                {client.tier === 'Membre Gold' && (
+                                                                    <span className={styles.goldBadge}><Star size={9} /> GOLD</span>
+                                                                )}
+                                                            </h4>
+                                                            <p>{client.email}</p>
+                                                            <div className={styles.clientPasswordRow}>
+                                                                <span className={styles.clientPasswordLabel}>MDP:</span>
+                                                                <span
+                                                                    className={styles.clientPasswordValue}
+                                                                    style={{ cursor: 'pointer' }}
+                                                                    title="Cliquer pour copier"
+                                                                    onClick={() => {
+                                                                        if (client.password) {
+                                                                            navigator.clipboard.writeText(client.password);
+                                                                            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Mot de passe copié !', showConfirmButton: false, timer: 1500, timerProgressBar: true });
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    {visiblePasswordId === client.id ? (client.password || '—') : '••••••••'}
+                                                                </span>
+                                                                <button
+                                                                    className={styles.clientPasswordToggle}
+                                                                    onClick={() => setVisiblePasswordId(visiblePasswordId === client.id ? null : client.id)}
+                                                                    title={visiblePasswordId === client.id ? 'Masquer' : 'Afficher'}
+                                                                >
+                                                                    {visiblePasswordId === client.id ? <EyeOff size={13} /> : <Eye size={13} />}
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     </div>
-                                                    <div
-                                                        className={styles.clientInfo}
-                                                        style={{ cursor: 'pointer' }}
-                                                        onClick={() => {
-                                                            setSelectedClientForFiche({ ...client });
-                                                            setIsFicheModalOpen(true);
-                                                        }}
-                                                    >
-                                                        <h4>{client.name}</h4>
-                                                        <p>{client.email}</p>
-                                                    </div>
-                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                    <div className={styles.clientCardActions} style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                                                         <div className={styles.customDropdown}>
                                                             <button
                                                                 className={styles.dropdownTrigger}
@@ -1683,7 +2229,7 @@ export default function Dashboard() {
                                                     <div className={styles.clientInfo}>
                                                         <h4>{res.user?.name || 'Client Inconnu'}</h4>
                                                         <div style={{ display: 'flex', gap: '15px', alignItems: 'baseline' }}>
-                                                            <p style={{ fontWeight: 600 }}>{res.service?.name}</p>
+                                                            <p style={{ fontWeight: 600 }}>{res.externalTitle || res.service?.name}</p>
                                                             <span className="text-gold" style={{ fontWeight: 700 }}>{res.service?.price} DT</span>
                                                         </div>
                                                         <small style={{ color: 'var(--text-dim)' }}>{new Date(res.date).toLocaleString(language, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</small>
@@ -1722,7 +2268,7 @@ export default function Dashboard() {
                                                 </div>
                                                 <div className={styles.clientInfo}>
                                                     <h4>{res.user?.name}</h4>
-                                                    <p>{res.service?.name}</p>
+                                                    <p>{res.externalTitle || res.service?.name}</p>
                                                 </div>
                                                 <div style={{ textAlign: 'right' }}>
                                                     <div className="text-gold" style={{ fontSize: '1.1rem', fontWeight: 800 }}>+{res.service?.price} DT</div>
@@ -1795,9 +2341,10 @@ export default function Dashboard() {
                                                 // Days
                                                 for (let i = 1; i <= daysInMonth; i++) {
                                                     const d = new Date(year, month, i);
-                                                    const dateStr = d.toISOString().split('T')[0];
+                                                    const dateStr = formatLocalDate(d);
                                                     const isSelected = selectedDayLine === dateStr;
-                                                    const isToday = new Date().toISOString().split('T')[0] === dateStr;
+                                                    const today = new Date();
+                                                    const isToday = formatLocalDate(today) === dateStr;
                                                     const isPast = d < new Date(new Date().setHours(0, 0, 0, 0));
 
                                                     days.push(
@@ -1836,9 +2383,11 @@ export default function Dashboard() {
                                                         className={`${styles.timeChip} ${selectedTimeLine === time ? styles.active : ''}`}
                                                         onClick={() => {
                                                             setSelectedTimeLine(time);
-                                                            // Set the full ISO string expected by the mutation
-                                                            const fullDate = `${selectedDayLine}T${time}:00.000Z`; // simplified ISO
-                                                            setBookingDate(fullDate);
+                                                            // Robust date construction using local parts to ensure correct UTC offset calculation
+                                                            const [y, m, d] = selectedDayLine.split('-').map(Number);
+                                                            const [hh, mm] = time.split(':').map(Number);
+                                                            const dateObj = new Date(y, m - 1, d, hh, mm);
+                                                            setBookingDate(dateObj.toISOString());
                                                         }}
                                                     >
                                                         {time}
@@ -1873,7 +2422,7 @@ export default function Dashboard() {
                                         <button className={styles.btnCancel} onClick={() => setIsBookingModalOpen(false)}>{t('cancel')}</button>
                                         <button className={styles.btnSaveLux} onClick={async () => {
                                             if (!bookingDate || !bookingStaff) {
-                                                alert(t('availableTime')); // Or a specific error
+                                                swalLux('warning', t('availableTime'));
                                                 return;
                                             }
                                             try {
@@ -1885,11 +2434,11 @@ export default function Dashboard() {
                                                         date: bookingDate
                                                     }
                                                 });
-                                                alert(t('resConfirmed'));
+                                                swalLux('success', t('resConfirmed'));
                                                 setIsBookingModalOpen(false);
                                             } catch (e) {
                                                 console.error(e);
-                                                alert(t('bookingFailed'));
+                                                swalLux('error', t('bookingFailed'));
                                             }
                                         }}>{t('confirmBooking')}</button>
                                     </div>
@@ -1954,9 +2503,9 @@ export default function Dashboard() {
                                                             if (confirm(t('cancelRes'))) {
                                                                 const res = await deleteReservation({ variables: { id: r.id } });
                                                                 if ((res.data as any)?.deleteReservation) {
-                                                                    alert(t('resCancelled'));
+                                                                    swalLux('success', t('resCancelled'));
                                                                 } else {
-                                                                    alert(t('failCancel'));
+                                                                    swalLux('error', t('failCancel'));
                                                                 }
                                                             }
                                                         }}
@@ -1983,7 +2532,7 @@ export default function Dashboard() {
 
                                     <div className={styles.modalActions} style={{ marginTop: '30px' }}>
                                         <button className={styles.btnCancel} onClick={() => setIsCartModalOpen(false)}>{t('continueShopping')}</button>
-                                        <button className={styles.btnSaveLux} onClick={() => alert('Proceeding to payment gateway...')}>
+                                        <button className={styles.btnSaveLux} onClick={() => swalLux('info', 'Paiement', 'Redirection vers la passerelle de paiement...')}>
                                             {t('pay')} <ArrowUpRight size={16} />
                                         </button>
                                     </div>
@@ -2342,10 +2891,10 @@ export default function Dashboard() {
                                             </div>
                                         </div>
                                         <div className={styles.quickFilterGroup}>
-                                            <button className={styles.quickFilterBtn} onClick={() => setRevenueDateRange({ start: new Date().toISOString().split('T')[0], end: new Date().toISOString().split('T')[0] })}>Aujourd'hui</button>
+                                            <button className={styles.quickFilterBtn} onClick={() => setRevenueDateRange({ start: formatLocalDate(new Date()), end: formatLocalDate(new Date()) })}>Aujourd'hui</button>
                                             <button className={styles.quickFilterBtn} onClick={() => {
-                                                const start = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-                                                const end = new Date().toISOString().split('T')[0];
+                                                const start = formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+                                                const end = formatLocalDate(new Date());
                                                 setRevenueDateRange({ start, end });
                                             }}>Ce Mois</button>
                                         </div>
@@ -2442,11 +2991,14 @@ export default function Dashboard() {
                                 onClick={(e) => e.stopPropagation()}
                             >
                                 <div className={styles.modalHeader}>
+                                    <div className={styles.mobileGrabHandle}></div>
                                     <div className={styles.statIconLux} style={{ background: 'rgba(223, 185, 109, 0.15)', width: '45px', height: '45px' }}>
                                         <Calendar color="var(--accent)" size={20} />
                                     </div>
                                     <h3>Agenda Complet du Jour</h3>
-                                    <button onClick={() => setIsAgendaModalOpen(false)} className={styles.closeBtn}>×</button>
+                                    <div style={{ marginLeft: 'auto', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                        <button onClick={() => setIsAgendaModalOpen(false)} className={styles.closeBtn}>×</button>
+                                    </div>
                                 </div>
                                 <div className={styles.modalBody}>
                                     <div className={styles.revenueFilterRow}>
@@ -2489,12 +3041,17 @@ export default function Dashboard() {
                                             return matchesSearch && matchesService;
                                         }).map((res: any) => (
                                             <div key={res.id} className={styles.tableRow} style={{ gridTemplateColumns: '1fr 2fr 1.5fr 1fr' }}>
-                                                <div className={styles.agendaTimeCell}>
+                                                <div 
+                                                    className={styles.agendaTimeCell}
+                                                    onClick={() => user?.role === 'admin' && handleTimeChange(res.id, res.date)}
+                                                    style={{ cursor: user?.role === 'admin' ? 'pointer' : 'default', fontWeight: '800' }}
+                                                    title={user?.role === 'admin' ? 'Cliquer pour modifier l\'heure' : ''}
+                                                >
                                                     {new Date(res.date).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
                                                 </div>
                                                 <div className={styles.tableName}>
                                                     <div className={styles.serviceClientInfo}>
-                                                        <strong>{res.service?.name || 'Service Inconnu'}</strong>
+                                                        <strong>{res.externalTitle || res.service?.name || 'Service Inconnu'}</strong>
                                                         <span className={styles.clientSub}>{res.user?.name || 'Client Anonyme'}</span>
                                                     </div>
                                                 </div>
@@ -2502,8 +3059,14 @@ export default function Dashboard() {
                                                     <UserCheck size={12} />
                                                     <span>{res.prestataire?.name || 'Non assigné'}</span>
                                                 </div>
-                                                <div className={`${styles.intelStatus} ${styles[res.status]}`} style={{ width: 'fit-content' }}>
-                                                    {res.status}
+                                                <div 
+                                                    className={`${styles.intelStatus} ${styles[res.status]}`} 
+                                                    style={{ width: 'fit-content', cursor: user?.role === 'admin' ? 'pointer' : 'default' }}
+                                                    onClick={() => {
+                                                        if (user?.role === 'admin') handleStatusChange(res.id, res.status);
+                                                    }}
+                                                >
+                                                    {res.status?.toUpperCase()}
                                                 </div>
                                             </div>
                                         ))}
@@ -2599,15 +3162,48 @@ export default function Dashboard() {
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>{t('memberStatus')}</label>
-                                            <select
-                                                className={styles.luxuryInput}
-                                                value={editingClient.tier || 'Normal'}
-                                                onChange={(e) => setEditingClient({ ...editingClient, tier: e.target.value })}
-                                                style={{ background: 'var(--primary)', color: 'white' }}
-                                            >
-                                                <option value="Normal">{t('normalMember')}</option>
-                                                <option value="Membre Gold">{t('goldMember')}</option>
-                                            </select>
+                                            <div style={{ display: 'flex', gap: '12px' }}>
+                                                {[
+                                                    { value: 'Normal', label: t('normalMember') || 'Normal' },
+                                                    { value: 'Membre Gold', label: t('goldMember') || 'Membre Gold' }
+                                                ].map((opt) => (
+                                                    <button
+                                                        key={opt.value}
+                                                        type="button"
+                                                        onClick={() => setEditingClient({ ...editingClient, tier: opt.value })}
+                                                        style={{
+                                                            flex: 1,
+                                                            padding: '12px 16px',
+                                                            borderRadius: '14px',
+                                                            border: (editingClient.tier || 'Normal') === opt.value
+                                                                ? '2px solid #DFB96D'
+                                                                : '1.5px solid rgba(223,185,109,0.2)',
+                                                            background: (editingClient.tier || 'Normal') === opt.value
+                                                                ? opt.value === 'Membre Gold'
+                                                                    ? 'linear-gradient(135deg, #C9973A, #DFB96D)'
+                                                                    : 'rgba(223,185,109,0.12)'
+                                                                : 'rgba(255,255,255,0.6)',
+                                                            color: (editingClient.tier || 'Normal') === opt.value
+                                                                ? opt.value === 'Membre Gold' ? '#fff' : '#1A0F0A'
+                                                                : 'var(--text-dim)',
+                                                            fontWeight: 700,
+                                                            fontSize: '0.85rem',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.25s ease',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            gap: '6px',
+                                                            boxShadow: (editingClient.tier || 'Normal') === opt.value && opt.value === 'Membre Gold'
+                                                                ? '0 4px 14px rgba(223,185,109,0.4)'
+                                                                : 'none'
+                                                        }}
+                                                    >
+                                                        {opt.value === 'Membre Gold' && <Star size={13} />}
+                                                        {opt.label}
+                                                    </button>
+                                                ))}
+                                            </div>
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>{t('password')} ({t('leaveEmpty') || 'Laisser vide pour ne pas changer'})</label>
@@ -3768,7 +4364,7 @@ export default function Dashboard() {
                     )}
                     {/* Payment Mode Selection Modal */}
                     {isPaymentModalOpen && selectedReservationForPayment && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 3000 }} onClick={(e) => e.target === e.currentTarget && setIsPaymentModalOpen(false)}>
+                        <div className={styles.modalOverlay} style={{ zIndex: 3000 }} onClick={(e) => { if (e.target === e.currentTarget) { setIsPaymentModalOpen(false); setPaymentModeLine(''); setPointsToDeduct(''); } }}>
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -3784,7 +4380,7 @@ export default function Dashboard() {
                                         </div>
                                         <h3 style={{ margin: 0 }}>Mode de Paiement</h3>
                                     </div>
-                                    <button className={styles.closeModal} onClick={() => setIsPaymentModalOpen(false)}>×</button>
+                                    <button className={styles.closeModal} onClick={() => { setIsPaymentModalOpen(false); setPaymentModeLine(''); setPointsToDeduct(''); }}>×</button>
                                 </div>
 
                                 <div className={styles.modalBody} style={{ padding: '30px' }}>
@@ -3796,83 +4392,238 @@ export default function Dashboard() {
                                         </div>
                                     </div>
 
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
-                                        {[
-                                            { id: 'Espèce', label: 'Espèce', icon: <Banknote size={24} /> },
-                                            { id: 'Chèque', label: 'Chèque', icon: <Ticket size={24} /> },
-                                            { id: 'Carte Bancaire', label: 'Carte Bancaire', icon: <CreditCard size={24} /> },
-                                            { id: 'Chèque Cadeau', label: 'Cadeau', icon: <Gift size={24} /> },
-                                            { id: 'Offre', label: 'Offre', icon: <Percent size={24} /> }
-                                        ].map((mode) => (
-                                            <button
-                                                key={mode.id}
-                                                className={styles.luxuryOptionBtn}
-                                                style={{
-                                                    padding: '20px 10px',
-                                                    borderRadius: '16px',
-                                                    border: paymentModeLine === mode.id ? '2px solid var(--accent)' : '1px solid rgba(0,0,0,0.05)',
-                                                    background: paymentModeLine === mode.id ? 'var(--accent)' : 'white',
-                                                    color: 'var(--primary)',
-                                                    cursor: 'pointer',
-                                                    display: 'flex',
-                                                    flexDirection: 'column',
-                                                    alignItems: 'center',
-                                                    gap: '12px',
-                                                    boxShadow: paymentModeLine === mode.id ? '0 10px 25px rgba(223, 185, 109, 0.3)' : '0 4px 12px rgba(0,0,0,0.03)',
-                                                    gridColumn: mode.id === 'Offre' ? 'span 2' : 'auto',
-                                                    transition: 'all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1)'
-                                                }}
-                                                onClick={() => setPaymentModeLine(mode.id)}
-                                            >
-                                                <div style={{ opacity: paymentModeLine === mode.id ? 1 : 0.6 }}>{mode.icon}</div>
-                                                <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{mode.label}</span>
-                                            </button>
-                                        ))}
-                                    </div>
+                                    {/* ── Step 1: regular payment methods ── */}
+                                    {(() => {
+                                        const clientPoints = data?.clients?.find((c: any) => c.id === selectedReservationForPayment?.user?.id)?.points ?? 0;
+                                        const totalPrice = selectedReservationForPayment?.service?.price ?? 0;
+                                        const pts = parseInt(pointsToDeduct) || 0;
+                                        const ptsCapped = Math.min(pts, clientPoints);
+                                        const pointsValue = +(ptsCapped / 10).toFixed(2);
+                                        const remaining = Math.max(0, +(totalPrice - pointsValue).toFixed(2));
+                                        const maxUsablePoints = Math.min(clientPoints, totalPrice * 10);
+                                        const isOver = pts > clientPoints;
+                                        const fullyCovered = usePointsCombo && pts > 0 && remaining === 0;
+                                        const needsSecondary = usePointsCombo && pts > 0 && !isOver && remaining > 0;
+                                        const canConfirm = !usePointsCombo
+                                            ? !!paymentModeLine
+                                            : (pts > 0 && !isOver && (fullyCovered || !!secondaryPaymentMode));
 
-                                    <div className={styles.modalActions} style={{ marginTop: '40px', background: 'transparent', padding: 0 }}>
-                                        <button className={styles.btnCancel} style={{ flex: 1 }} onClick={() => setIsPaymentModalOpen(false)}>Annuler</button>
-                                        <button 
-                                            className={styles.btnSaveLux} 
-                                            disabled={!paymentModeLine}
-                                            style={{ flex: 2, opacity: !paymentModeLine ? 0.5 : 1 }}
-                                            onClick={async () => {
-                                                if (!paymentModeLine) return;
-                                                try {
-                                                    await updateReservationStatus({ 
-                                                        variables: { 
-                                                            id: selectedReservationForPayment.id, 
-                                                            status: 'paid',
-                                                            paymentMode: paymentModeLine
-                                                        } 
-                                                    });
-                                                    
-                                                    Swal.fire({
-                                                        title: 'Paiement Confirmé',
-                                                        text: `Règlement de ${selectedReservationForPayment.service?.price} DT effectué par ${paymentModeLine}.`,
-                                                        icon: 'success',
-                                                        confirmButtonColor: '#DFB96D',
-                                                        background: '#F8F5F0',
-                                                        timer: 3000
-                                                    });
-                                                    
-                                                    setIsPaymentModalOpen(false);
-                                                    setSelectedReservationForPayment(null);
-                                                    setPaymentModeLine('');
-                                                } catch (e) {
-                                                    console.error(e);
-                                                    Swal.fire({
-                                                        title: 'Erreur',
-                                                        text: 'Impossible d\'enregistrer le paiement.',
-                                                        icon: 'error',
-                                                        confirmButtonColor: '#DFB96D'
-                                                    });
-                                                }
-                                            }}
-                                        >
-                                            Confirmer le Paiement
-                                        </button>
-                                    </div>
+                                        return (
+                                            <>
+                                                {/* Regular methods grid */}
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
+                                                    {[
+                                                        { id: 'Espèce', label: 'Espèce', icon: <Banknote size={24} /> },
+                                                        { id: 'Chèque', label: 'Chèque', icon: <Ticket size={24} /> },
+                                                        { id: 'Carte Bancaire', label: 'Carte Bancaire', icon: <CreditCard size={24} /> },
+                                                        { id: 'Chèque Cadeau', label: 'Cadeau', icon: <Gift size={24} /> },
+                                                        { id: 'Offre', label: 'Offre', icon: <Percent size={24} /> },
+                                                    ].map((mode) => {
+                                                        const active = !usePointsCombo ? paymentModeLine === mode.id : secondaryPaymentMode === mode.id;
+                                                        const dimmed = usePointsCombo && fullyCovered;
+                                                        return (
+                                                            <button
+                                                                key={mode.id}
+                                                                className={styles.luxuryOptionBtn}
+                                                                style={{
+                                                                    padding: '20px 10px', borderRadius: '16px',
+                                                                    border: active ? '2px solid var(--accent)' : '1px solid rgba(0,0,0,0.05)',
+                                                                    background: active ? 'var(--accent)' : 'white',
+                                                                    color: 'var(--primary)', cursor: dimmed ? 'not-allowed' : 'pointer',
+                                                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px',
+                                                                    boxShadow: active ? '0 10px 25px rgba(223,185,109,0.3)' : '0 4px 12px rgba(0,0,0,0.03)',
+                                                                    gridColumn: mode.id === 'Offre' ? 'span 2' : 'auto',
+                                                                    transition: 'all 0.3s ease',
+                                                                    opacity: dimmed ? 0.35 : 1,
+                                                                }}
+                                                                onClick={() => {
+                                                                    if (dimmed) return;
+                                                                    if (!usePointsCombo) { setPaymentModeLine(mode.id); }
+                                                                    else { setSecondaryPaymentMode(secondaryPaymentMode === mode.id ? '' : mode.id); }
+                                                                }}
+                                                            >
+                                                                <div style={{ opacity: active ? 1 : 0.6 }}>{mode.icon}</div>
+                                                                <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>{mode.label}</span>
+                                                            </button>
+                                                        );
+                                                    })}
+
+                                                    {/* Solde Points toggle tile */}
+                                                    <button
+                                                        className={styles.luxuryOptionBtn}
+                                                        style={{
+                                                            padding: '20px 10px', borderRadius: '16px',
+                                                            border: usePointsCombo ? '2px solid #C9973A' : '1px solid rgba(0,0,0,0.05)',
+                                                            background: usePointsCombo ? 'linear-gradient(135deg, #C9973A, #DFB96D)' : 'white',
+                                                            color: usePointsCombo ? '#fff' : 'var(--primary)',
+                                                            cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                                                            alignItems: 'center', gap: '12px',
+                                                            boxShadow: usePointsCombo ? '0 10px 25px rgba(223,185,109,0.35)' : '0 4px 12px rgba(0,0,0,0.03)',
+                                                            transition: 'all 0.3s ease',
+                                                        }}
+                                                        onClick={() => {
+                                                            setUsePointsCombo(v => !v);
+                                                            setPointsToDeduct('');
+                                                            setSecondaryPaymentMode('');
+                                                            if (usePointsCombo) setPaymentModeLine('');
+                                                        }}
+                                                    >
+                                                        <div style={{ opacity: usePointsCombo ? 1 : 0.6 }}><Star size={24} /></div>
+                                                        <span style={{ fontSize: '0.8rem', fontWeight: 700 }}>Solde Points</span>
+                                                    </button>
+                                                </div>
+
+                                                {/* ── Points calculator panel ── */}
+                                                <AnimatePresence>
+                                                    {usePointsCombo && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, height: 0 }}
+                                                            animate={{ opacity: 1, height: 'auto' }}
+                                                            exit={{ opacity: 0, height: 0 }}
+                                                            style={{ overflow: 'hidden', marginTop: '16px' }}
+                                                        >
+                                                            <div style={{
+                                                                background: 'linear-gradient(135deg, rgba(223,185,109,0.08), rgba(223,185,109,0.15))',
+                                                                border: '1.5px solid rgba(223,185,109,0.3)',
+                                                                borderRadius: '16px', padding: '18px 20px',
+                                                                display: 'flex', flexDirection: 'column', gap: '14px'
+                                                            }}>
+                                                                {/* Balance */}
+                                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                                                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1A0F0A' }}>Points disponibles</span>
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                        <span style={{ background: 'linear-gradient(135deg,#C9973A,#DFB96D)', color: '#fff', fontWeight: 800, fontSize: '0.85rem', padding: '3px 12px', borderRadius: '50px' }}>{clientPoints} pts</span>
+                                                                        <span style={{ fontSize: '0.78rem', color: '#8B7355' }}>= {(clientPoints / 10).toFixed(2)} DT</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                {/* Input + MAX */}
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                    <Star size={16} color="#DFB96D" style={{ flexShrink: 0 }} />
+                                                                    <input
+                                                                        type="number" min={1} max={maxUsablePoints}
+                                                                        placeholder="Points à utiliser..."
+                                                                        value={pointsToDeduct}
+                                                                        onChange={e => { setPointsToDeduct(e.target.value); setSecondaryPaymentMode(''); }}
+                                                                        style={{
+                                                                            flex: 1, border: `1.5px solid ${isOver ? '#ff4444' : 'rgba(223,185,109,0.4)'}`,
+                                                                            borderRadius: '12px', padding: '10px 14px', fontSize: '0.95rem',
+                                                                            fontWeight: 700, outline: 'none', background: '#fff',
+                                                                            color: isOver ? '#ff4444' : '#1A0F0A'
+                                                                        }}
+                                                                    />
+                                                                    <button onClick={() => { setPointsToDeduct(String(Math.floor(maxUsablePoints))); setSecondaryPaymentMode(''); }}
+                                                                        style={{ flexShrink: 0, padding: '8px 12px', borderRadius: '10px', border: '1px solid rgba(223,185,109,0.4)', background: 'rgba(223,185,109,0.1)', color: '#C9973A', fontSize: '0.72rem', fontWeight: 800, cursor: 'pointer' }}>MAX</button>
+                                                                </div>
+                                                                {isOver && <span style={{ fontSize: '0.75rem', color: '#ff4444', fontWeight: 600 }}>⚠ Max {clientPoints} pts disponibles</span>}
+
+                                                                {/* Breakdown */}
+                                                                {pts > 0 && !isOver && (
+                                                                    <div style={{ background: '#fff', borderRadius: '12px', padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid rgba(223,185,109,0.2)' }}>
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#555' }}>
+                                                                            <span>Total service</span><span style={{ fontWeight: 700 }}>{totalPrice} DT</span>
+                                                                        </div>
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#C9973A' }}>
+                                                                            <span>Points ({ptsCapped} pts × 0.1)</span><span style={{ fontWeight: 700 }}>− {pointsValue} DT</span>
+                                                                        </div>
+                                                                        <div style={{ height: '1px', background: 'rgba(223,185,109,0.2)' }} />
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem' }}>
+                                                                            <span style={{ fontWeight: 800, color: '#1A0F0A' }}>Reste à payer</span>
+                                                                            <span style={{ fontWeight: 900, color: fullyCovered ? '#2D6A4F' : '#1A0F0A', fontSize: '1.1rem' }}>
+                                                                                {fullyCovered ? '✓ 0.00 DT' : `${remaining.toFixed(2)} DT`}
+                                                                            </span>
+                                                                        </div>
+                                                                        {fullyCovered && <div style={{ fontSize: '0.75rem', color: '#2D6A4F', fontWeight: 600, textAlign: 'center' }}>✓ Entièrement couvert par les points</div>}
+                                                                    </div>
+                                                                )}
+
+                                                                {/* ── Step 2: pick method for remaining ── */}
+                                                                {needsSecondary && (
+                                                                    <div>
+                                                                        <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#1A0F0A', margin: '0 0 10px 0' }}>
+                                                                            Reste <span style={{ color: '#C9973A' }}>{remaining.toFixed(2)} DT</span> — choisir le mode de paiement :
+                                                                        </p>
+                                                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                                                            {[
+                                                                                { id: 'Espèce', label: 'Espèce', icon: <Banknote size={18} /> },
+                                                                                { id: 'Chèque', label: 'Chèque', icon: <Ticket size={18} /> },
+                                                                                { id: 'Carte Bancaire', label: 'Carte', icon: <CreditCard size={18} /> },
+                                                                                { id: 'Chèque Cadeau', label: 'Cadeau', icon: <Gift size={18} /> },
+                                                                                { id: 'Offre', label: 'Offre', icon: <Percent size={18} /> },
+                                                                            ].map(m => (
+                                                                                <button key={m.id}
+                                                                                    onClick={() => setSecondaryPaymentMode(secondaryPaymentMode === m.id ? '' : m.id)}
+                                                                                    style={{
+                                                                                        padding: '12px 6px', borderRadius: '12px',
+                                                                                        border: secondaryPaymentMode === m.id ? '2px solid var(--accent)' : '1px solid rgba(0,0,0,0.06)',
+                                                                                        background: secondaryPaymentMode === m.id ? 'var(--accent)' : '#fff',
+                                                                                        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px',
+                                                                                        cursor: 'pointer', transition: 'all 0.2s ease',
+                                                                                        boxShadow: secondaryPaymentMode === m.id ? '0 6px 16px rgba(223,185,109,0.25)' : 'none',
+                                                                                        gridColumn: m.id === 'Offre' ? 'span 2' : 'auto',
+                                                                                    }}>
+                                                                                    <div style={{ opacity: secondaryPaymentMode === m.id ? 1 : 0.5 }}>{m.icon}</div>
+                                                                                    <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--primary)' }}>{m.label}</span>
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+
+                                                {/* ── Confirm ── */}
+                                                <div className={styles.modalActions} style={{ marginTop: '30px', background: 'transparent', padding: 0 }}>
+                                                    <button className={styles.btnCancel} style={{ flex: 1 }} onClick={() => { setIsPaymentModalOpen(false); setPaymentModeLine(''); setPointsToDeduct(''); setUsePointsCombo(false); setSecondaryPaymentMode(''); }}>Annuler</button>
+                                                    <button
+                                                        className={styles.btnSaveLux}
+                                                        disabled={!canConfirm}
+                                                        style={{ flex: 2, opacity: canConfirm ? 1 : 0.5 }}
+                                                        onClick={async () => {
+                                                            if (!canConfirm) return;
+                                                            try {
+                                                                const finalMode = usePointsCombo
+                                                                    ? fullyCovered
+                                                                        ? `Solde Points (-${ptsCapped} pts)`
+                                                                        : `Solde Points (-${ptsCapped} pts) + ${secondaryPaymentMode} (${remaining.toFixed(2)} DT)`
+                                                                    : paymentModeLine;
+
+                                                                await updateReservationStatus({ variables: { id: selectedReservationForPayment.id, status: 'paid', paymentMode: finalMode } });
+
+                                                                if (usePointsCombo && selectedReservationForPayment?.user?.id) {
+                                                                    await deductPoints({ variables: { userId: selectedReservationForPayment.user.id, points: ptsCapped } });
+                                                                }
+
+                                                                Swal.fire({
+                                                                    title: 'Paiement Confirmé',
+                                                                    text: usePointsCombo
+                                                                        ? fullyCovered
+                                                                            ? `${ptsCapped} points déduits. Paiement entièrement couvert.`
+                                                                            : `${ptsCapped} pts déduits + ${remaining.toFixed(2)} DT par ${secondaryPaymentMode}.`
+                                                                        : `${selectedReservationForPayment.service?.price} DT par ${paymentModeLine}.`,
+                                                                    icon: 'success', confirmButtonColor: '#DFB96D', background: '#F8F5F0', timer: 3000
+                                                                });
+
+                                                                setIsPaymentModalOpen(false);
+                                                                setSelectedReservationForPayment(null);
+                                                                setPaymentModeLine('');
+                                                                setPointsToDeduct('');
+                                                                setUsePointsCombo(false);
+                                                                setSecondaryPaymentMode('');
+                                                            } catch (e) {
+                                                                console.error(e);
+                                                                Swal.fire({ title: 'Erreur', text: 'Impossible d\'enregistrer le paiement.', icon: 'error', confirmButtonColor: '#DFB96D' });
+                                                            }
+                                                        }}
+                                                    >
+                                                        Confirmer le Paiement
+                                                    </button>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
                                 </div>
                             </motion.div>
                         </div>
