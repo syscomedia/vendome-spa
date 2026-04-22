@@ -35,7 +35,7 @@ export default function SpecialistDetail() {
     const params = useParams() as { id: string };
     const router = useRouter();
     const { data: session } = useSession();
-    const { t } = useLanguage();
+    const { t, language } = useLanguage();
     const [comment, setComment] = useState('');
     const [rating, setRating] = useState(0);
     const [mounted, setMounted] = useState(false);
@@ -108,29 +108,33 @@ export default function SpecialistDetail() {
                         <span>{t('backToDashboard')}</span>
                     </motion.button>
 
-                    <motion.button
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setIsEditModalOpen(true)}
-                        className={styles.adminUpdateBtn}
-                    >
-                        <Edit2 size={20} />
-                        <span>MODIFIER LE PROFIL</span>
-                    </motion.button>
+                    {(session?.user as any)?.role === 'admin' && (
+                        <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setIsEditModalOpen(true)}
+                            className={styles.adminUpdateBtn}
+                        >
+                            <Edit2 size={20} />
+                            <span>MODIFIER LE PROFIL</span>
+                        </motion.button>
+                    )}
                 </div>
             </nav>
 
             {/* Floating Admin FAB for immediate visibility */}
-            <motion.button
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => setIsEditModalOpen(true)}
-                className={styles.floatingEditFab}
-            >
-                <Edit2 size={24} />
-            </motion.button>
+            {(session?.user as any)?.role === 'admin' && (
+                <motion.button
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    whileHover={{ scale: 1.1 }}
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => setIsEditModalOpen(true)}
+                    className={styles.floatingEditFab}
+                >
+                    <Edit2 size={24} />
+                </motion.button>
+            )}
 
             <main className={styles.main}>
                 <div className={styles.profileLayout}>
@@ -202,7 +206,7 @@ export default function SpecialistDetail() {
                                     <Sparkles size={14} /> {t('vendomeExclusivity')}
                                 </motion.div>
                                 
-                                {!isEditingHeader && (
+                                {(session?.user as any)?.role === 'admin' && !isEditingHeader && (
                                     <button 
                                         onClick={() => setIsEditingHeader(true)}
                                         className={styles.inlineEditBtn}
@@ -292,7 +296,7 @@ export default function SpecialistDetail() {
                                     <Activity size={24} className="text-gold" />
                                     <h3>{t('journeyOfExcellence')}</h3>
                                 </div>
-                                {!isEditingBio && (
+                                {(session?.user as any)?.role === 'admin' && !isEditingBio && (
                                     <button 
                                         onClick={() => setIsEditingBio(true)}
                                         className={styles.inlineEditBtn}
@@ -421,15 +425,43 @@ export default function SpecialistDetail() {
 
                             <div className={styles.testimonials}>
                                 <h4>{t('weeklyTestimonials')}</h4>
-                                <div className={styles.testimonialCard}>
-                                    <div className={styles.tMeta}>
-                                        <div className={styles.tStars}>
-                                            {[1, 2, 3, 4, 5].map(s => <Star key={s} size={16} fill="#E2B45C" color="#E2B45C" />)}
+                                {staff.evaluations && staff.evaluations.length > 0 ? (
+                                    staff.evaluations.map((evalItem: any) => (
+                                        <div key={evalItem.id} className={styles.testimonialCard}>
+                                            <div className={styles.tMeta}>
+                                                <div className={styles.tUser}>
+                                                    <div className={styles.tUserImg}>
+                                                        {evalItem.user.image ? (
+                                                            <img src={evalItem.user.image} alt={evalItem.user.name} />
+                                                        ) : (
+                                                            <div className={styles.tUserPlaceholder}>{evalItem.user.name.charAt(0)}</div>
+                                                        )}
+                                                    </div>
+                                                    <span>{evalItem.user.name}</span>
+                                                </div>
+                                                <div className={styles.tStars}>
+                                                    {[1, 2, 3, 4, 5].map(s => (
+                                                        <Star key={s} size={14} fill={s <= evalItem.rating ? "#E2B45C" : "none"} color={s <= evalItem.rating ? "#E2B45C" : "rgba(255,255,255,0.2)"} />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <p className={styles.tComment}>"{evalItem.comment}"</p>
+                                            <span className={styles.tDate}>
+                                                {new Date(parseInt(evalItem.createdAt)).toLocaleDateString(language === 'ar' ? 'ar-TN' : language === 'fr' ? 'fr-FR' : 'fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                            </span>
                                         </div>
-                                        <span>{t('hoursAgo', { count: 12 })}</span>
+                                    ))
+                                ) : (
+                                    <div className={styles.testimonialCard}>
+                                        <div className={styles.tMeta}>
+                                            <div className={styles.tStars}>
+                                                {[1, 2, 3, 4, 5].map(s => <Star key={s} size={16} fill="#E2B45C" color="#E2B45C" />)}
+                                            </div>
+                                            <span>{t('hoursAgo', { count: 12 })}</span>
+                                        </div>
+                                        <p>"{t('testimonialStaffOne', { name: staff.name, specialty: staff.specialty })}"</p>
                                     </div>
-                                    <p>"{t('testimonialStaffOne', { name: staff.name, specialty: staff.specialty })}"</p>
-                                </div>
+                                )}
                             </div>
                         </motion.div>
                     </div>

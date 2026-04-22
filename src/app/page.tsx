@@ -8,7 +8,7 @@ import { Language } from '@/lib/mock-data';
 import styles from './page.module.css';
 import { ChevronRight, Globe, Mail, Lock, Sparkles, Users, Eye, EyeOff } from 'lucide-react';
 
-import { useSession, signIn } from "next-auth/react";
+import { useSession, signIn, signOut } from "next-auth/react";
 import { useMutation } from '@apollo/client/react';
 import { LOGIN_MUTATION, REGISTER_MUTATION, SYNC_GOOGLE_USER_MUTATION } from '@/graphql/mutations';
 
@@ -44,6 +44,7 @@ export default function LoginPage() {
             router.push('/dashboard');
           } else if (data?.syncGoogleUser?.error) {
             setErrorMsg(data.syncGoogleUser.error);
+            signOut({ redirect: false });
           }
         } catch (e) {
           console.error("Google Sync Error", e);

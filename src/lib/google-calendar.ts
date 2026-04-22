@@ -56,6 +56,7 @@ export const createGoogleCalendarEvent = async (auth: any, reservation: any) => 
             dateTime: new Date(new Date(reservation.date).getTime() + 60 * 60 * 1000).toISOString(),
             timeZone: 'Africa/Tunis',
         },
+        colorId: reservation.prestataire?.calendar_color_id || null,
     };
 
     try {

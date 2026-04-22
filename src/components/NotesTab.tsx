@@ -1,15 +1,229 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery, useMutation } from '@apollo/client/react';
 import { GET_CLIENT_NOTES, GET_DASHBOARD_DATA } from '@/graphql/queries';
 import { ADD_CLIENT_NOTE_MUTATION } from '@/graphql/mutations';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, User as UserIcon, Calendar, Trash2, PenLine, Sparkles, MessageSquare } from 'lucide-react';
+import { Send, User as UserIcon, Calendar, Trash2, PenLine, Sparkles, MessageSquare, ChevronDown, Search, X } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface NotesTabProps {
     user: any;
     styles: any;
     t: any;
+}
+
+function ClientDropdown({ clients, selectedClientId, onSelect }: { clients: any[]; selectedClientId: string | null; onSelect: (id: string | null) => void }) {
+    const [open, setOpen] = useState(false);
+    const [search, setSearch] = useState('');
+    const [panelStyle, setPanelStyle] = useState<React.CSSProperties>({});
+    const triggerRef = useRef<HTMLButtonElement>(null);
+    const panelRef = useRef<HTMLDivElement>(null);
+    const searchRef = useRef<HTMLInputElement>(null);
+
+    const selected = clients.find((c) => c.id === selectedClientId);
+    const filtered = clients.filter(
+        (c) =>
+            c.name.toLowerCase().includes(search.toLowerCase()) ||
+            c.email.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const updatePanelPosition = () => {
+        if (!triggerRef.current) return;
+        const rect = triggerRef.current.getBoundingClientRect();
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const goUp = spaceBelow < 280 && rect.top > spaceBelow;
+        setPanelStyle({
+            position: 'fixed',
+            left: rect.left,
+            width: rect.width,
+            zIndex: 99999,
+            ...(goUp
+                ? { bottom: window.innerHeight - rect.top + 6, top: 'auto' }
+                : { top: rect.bottom + 6, bottom: 'auto' }),
+        });
+    };
+
+    const handleToggle = () => {
+        if (open) { setOpen(false); return; }
+        updatePanelPosition();
+        setOpen(true);
+    };
+
+    useEffect(() => {
+        if (!open) return;
+        const close = (e: MouseEvent) => {
+            if (!triggerRef.current?.contains(e.target as Node) && !panelRef.current?.contains(e.target as Node))
+                setOpen(false);
+        };
+        document.addEventListener('mousedown', close);
+        return () => {
+            document.removeEventListener('mousedown', close);
+        };
+    }, [open]);
+
+    useEffect(() => {
+        if (open && searchRef.current) searchRef.current.focus();
+    }, [open]);
+
+    const panel = (
+        <AnimatePresence>
+            {open && (
+                <motion.div
+                    ref={panelRef}
+                    initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    style={{
+                        ...panelStyle,
+                        background: 'white',
+                        borderRadius: '16px',
+                        boxShadow: '0 16px 48px rgba(0,0,0,0.18)',
+                        border: '1px solid rgba(223,185,109,0.2)',
+                        overflow: 'hidden',
+                    }}
+                >
+                    {/* Search input */}
+                    <div style={{ padding: '12px 12px 8px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#F5F1E9', borderRadius: '10px', padding: '8px 12px' }}>
+                            <Search size={14} style={{ color: '#999', flexShrink: 0 }} />
+                            <input
+                                ref={searchRef}
+                                type="text"
+                                placeholder="Rechercher un client..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                style={{
+                                    border: 'none',
+                                    background: 'transparent',
+                                    outline: 'none',
+                                    fontSize: '0.85rem',
+                                    width: '100%',
+                                    color: 'var(--text-main)',
+                                    fontFamily: 'inherit',
+                                }}
+                            />
+                            {search && (
+                                <button onClick={() => setSearch('')} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, display: 'flex', color: '#999' }}>
+                                    <X size={13} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Client list */}
+                    <div style={{ maxHeight: '220px', overflowY: 'auto', padding: '8px' }}>
+                        {filtered.length === 0 ? (
+                            <div style={{ padding: '20px', textAlign: 'center', color: '#999', fontSize: '0.85rem' }}>Aucun client trouvé</div>
+                        ) : (
+                            filtered.map((c) => (
+                                <button
+                                    key={c.id}
+                                    type="button"
+                                    onClick={() => { onSelect(c.id); setSearch(''); setOpen(false); }}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '10px',
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: '10px',
+                                        border: 'none',
+                                        background: selectedClientId === c.id ? 'rgba(223,185,109,0.1)' : 'transparent',
+                                        cursor: 'pointer',
+                                        textAlign: 'left',
+                                        transition: 'background 0.15s',
+                                        fontFamily: 'inherit',
+                                    }}
+                                    onMouseEnter={(e) => { if (selectedClientId !== c.id) (e.currentTarget as HTMLElement).style.background = 'rgba(0,0,0,0.03)'; }}
+                                    onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = selectedClientId === c.id ? 'rgba(223,185,109,0.1)' : 'transparent'; }}
+                                >
+                                    <span style={{
+                                        width: '32px', height: '32px', borderRadius: '50%', flexShrink: 0,
+                                        background: selectedClientId === c.id ? 'rgba(223,185,109,0.25)' : '#F5F1E9',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                        <UserIcon size={14} style={{ color: selectedClientId === c.id ? 'var(--accent)' : '#aaa' }} />
+                                    </span>
+                                    <span style={{ overflow: 'hidden' }}>
+                                        <span style={{ display: 'block', fontSize: '0.9rem', fontWeight: selectedClientId === c.id ? 700 : 500, color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.name}</span>
+                                        <span style={{ display: 'block', fontSize: '0.75rem', color: '#999', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.email}</span>
+                                    </span>
+                                    {selectedClientId === c.id && (
+                                        <span style={{ marginLeft: 'auto', width: '8px', height: '8px', borderRadius: '50%', background: 'var(--accent)', flexShrink: 0 }} />
+                                    )}
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </motion.div>
+            )}
+        </AnimatePresence>
+    );
+
+    return (
+        <div style={{ position: 'relative', width: '100%' }}>
+            {/* Trigger button */}
+            <button
+                ref={triggerRef}
+                type="button"
+                onClick={handleToggle}
+                style={{
+                    width: '100%',
+                    padding: '14px 18px',
+                    borderRadius: '14px',
+                    border: open ? '1.5px solid var(--accent)' : '1.5px solid rgba(0,0,0,0.08)',
+                    background: 'var(--bg-cream, #F5F1E9)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    cursor: 'pointer',
+                    fontSize: '0.95rem',
+                    color: selected ? 'var(--text-main)' : '#999',
+                    fontFamily: 'inherit',
+                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                    boxShadow: open ? '0 0 0 3px rgba(223,185,109,0.15)' : 'none',
+                    textAlign: 'left',
+                }}
+            >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '10px', overflow: 'hidden' }}>
+                    {selected ? (
+                        <>
+                            <span style={{
+                                width: '28px', height: '28px', borderRadius: '50%',
+                                background: 'rgba(223,185,109,0.2)', display: 'flex',
+                                alignItems: 'center', justifyContent: 'center', flexShrink: 0
+                            }}>
+                                <UserIcon size={14} style={{ color: 'var(--accent)' }} />
+                            </span>
+                            <span style={{ overflow: 'hidden' }}>
+                                <span style={{ display: 'block', fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selected.name}</span>
+                                <span style={{ display: 'block', fontSize: '0.75rem', opacity: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selected.email}</span>
+                            </span>
+                        </>
+                    ) : (
+                        <span>--- Choisir un client ---</span>
+                    )}
+                </span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0, marginLeft: '8px' }}>
+                    {selected && (
+                        <span
+                            role="button"
+                            onClick={(e) => { e.stopPropagation(); onSelect(null); setSearch(''); }}
+                            style={{ display: 'flex', alignItems: 'center', padding: '2px', borderRadius: '50%', color: '#999' }}
+                        >
+                            <X size={14} />
+                        </span>
+                    )}
+                    <ChevronDown size={16} style={{ transition: 'transform 0.2s', transform: open ? 'rotate(180deg)' : 'rotate(0deg)', color: '#999' }} />
+                </span>
+            </button>
+
+            {/* Portal: renders outside all overflow:hidden parents */}
+            {typeof document !== 'undefined' && createPortal(panel, document.body)}
+        </div>
+    );
 }
 
 export default function NotesTab({ user, styles, t }: NotesTabProps) {
@@ -88,18 +302,12 @@ export default function NotesTab({ user, styles, t }: NotesTabProps) {
 
                     {user.role === 'admin' && (
                         <div style={{ marginBottom: '20px' }}>
-                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', opacity: 0.7 }}>SÉLECTIONNER UN CLIENT</label>
-                            <select 
-                                className={styles.luxuryInput}
-                                value={selectedClientId || ''}
-                                onChange={(e) => setSelectedClientId(e.target.value)}
-                                style={{ background: 'var(--bg-cream)', border: '1px solid rgba(0,0,0,0.05)' }}
-                            >
-                                <option value="">--- Choisir un client ---</option>
-                                {clients.map((c: any) => (
-                                    <option key={c.id} value={c.id}>{c.name} ({c.email})</option>
-                                ))}
-                            </select>
+                            <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, marginBottom: '8px', opacity: 0.7, letterSpacing: '0.05em' }}>SÉLECTIONNER UN CLIENT</label>
+                            <ClientDropdown
+                                clients={clients}
+                                selectedClientId={selectedClientId}
+                                onSelect={setSelectedClientId}
+                            />
                         </div>
                     )}
 

@@ -24,6 +24,8 @@ export const typeDefs = gql`
     hosp_expertise: Int
     prec_expertise: Int
     award_badge: String
+    calendar_color_id: String
+    evaluations: [Evaluation!]
   }
 
   type Amenity {
@@ -73,6 +75,7 @@ export const typeDefs = gql`
     allergies: String
     last_visit_notes: String
     image: String
+    is_blocked: Boolean
   }
 
   type AuthPayload {
@@ -96,6 +99,8 @@ export const typeDefs = gql`
     date: String!
     status: String!
     paymentMode: String
+    externalTitle: String
+    google_event_id: String
   }
 
   type ClientNote {
@@ -152,7 +157,7 @@ export const typeDefs = gql`
 
   type Mutation {
     addService(name: String!, description: String!, price: Float!, image: String!, duration: String!): Service!
-    addPrestataire(name: String!, role: String!, image: String!, rating: Float!, specialty: String!, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String): Prestataire!
+    addPrestataire(name: String!, role: String!, image: String!, rating: Float!, specialty: String!, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String): Prestataire!
     login(email: String!, password: String!): AuthPayload!
     register(email: String!, password: String!, name: String!): AuthPayload!
     syncGoogleUser(email: String!, name: String!): AuthPayload!
@@ -167,9 +172,9 @@ export const typeDefs = gql`
     removeService(id: ID!): Boolean
     updateService(id: ID!, name: String, description: String, price: Float, image: String, duration: String): Service!
     updateUserRole(userId: ID!, role: String!): User!
-    updateUser(userId: ID!, email: String, name: String, role: String, password: String, tier: String, hair_color_pref: String, favorite_coupe: String, nail_color_pref: String, music_pref: String, music_link: String, drink_pref: String, skin_type: String, birthday: String, phone: String, coffee_pref: String, employee_pref: String, favourite_service: String, allergies: String, last_visit_notes: String, image: String): User!
+    updateUser(userId: ID!, email: String, name: String, role: String, password: String, tier: String, hair_color_pref: String, favorite_coupe: String, nail_color_pref: String, music_pref: String, music_link: String, drink_pref: String, skin_type: String, birthday: String, phone: String, coffee_pref: String, employee_pref: String, favourite_service: String, allergies: String, last_visit_notes: String, image: String, is_blocked: Boolean): User!
     removeUser(userId: ID!): Boolean
-    updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String): Prestataire!
+    updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String): Prestataire!
     addProduct(name: String!, description: String!, price: Float!, image: String!): Product!
     updateProduct(id: ID!, name: String, description: String, price: Float, image: String): Product!
     removeProduct(id: ID!): Boolean
@@ -179,5 +184,6 @@ export const typeDefs = gql`
     addClientNote(clientId: ID!, authorId: ID!, content: String!): ClientNote!
     deleteSpecialist(id: ID!): Boolean
     deductPoints(userId: ID!, points: Int!): User!
+    purchaseProduct(userId: ID!, productId: ID!): Boolean
   }
 `;

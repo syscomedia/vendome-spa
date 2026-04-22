@@ -805,29 +805,61 @@
 .modalOverlay {
     position: fixed;
     inset: 0;
-    background: rgba(10, 5, 3, 0.8);
-    /* Reverted to dark backdrop */
-    backdrop-filter: blur(15px);
-    z-index: 1000;
+    background: rgba(10, 5, 3, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    z-index: 5000; /* Higher than mobile nav */
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 20px;
 }
 
 .modal {
     background: linear-gradient(135deg, #FFFDF9 0%, #F7EAD0 100%);
-    width: 90%;
+    width: 100%;
     max-width: 500px;
     border-radius: 30px;
     padding: 0;
     position: relative;
-    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.5);
     overflow: hidden;
     border: 3px solid #FFFFFF;
     outline: 1px solid rgba(223, 185, 109, 0.3);
     display: flex;
     flex-direction: column;
-    max-height: 88vh;
+    max-height: 90vh;
+}
+
+@media (max-width: 768px) {
+    .modalOverlay {
+        padding: 0;
+        padding-bottom: 96px; /* clear the floating nav bar (64px + 16px gap + buffer) */
+        align-items: flex-end;
+    }
+    .modal {
+        border-radius: 24px 24px 0 0;
+        max-height: calc(95dvh - 96px);
+        border-bottom: none;
+    }
+    .modalBody {
+        padding-bottom: 4px;
+    }
+    .modalActions {
+        padding: 14px 18px 20px;
+        gap: 12px;
+        background: linear-gradient(to top, #F7EAD0 85%, transparent);
+        border-top: 1px solid rgba(0,0,0,0.06);
+        flex-shrink: 0;
+    }
+    .modalActions .btnCancel,
+    .modalActions .btnSaveLux {
+        flex: 1;
+        justify-content: center;
+        padding: 14px 10px;
+        font-size: 0.78rem;
+        text-align: center;
+    }
 }
 
 .modal::-webkit-scrollbar,
@@ -971,10 +1003,11 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 20px;
-    padding: 24px 35px;
+    gap: 16px;
+    padding: 20px 28px 24px;
     flex-shrink: 0;
-    background: transparent;
+    background: linear-gradient(to top, #F7EAD0 80%, transparent);
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .btnCancel {
@@ -1081,6 +1114,112 @@
     box-shadow: 0 20px 50px rgba(184, 138, 68, 0.1);
     border-color: var(--accent);
 }
+
+.clientCardBlocked {
+    background: linear-gradient(145deg, #c0392b 0%, #e74c3c 35%, #f05545 60%, #c0392b 100%) !important;
+    border: 1.5px solid #c0392b !important;
+    box-shadow:
+        0 12px 40px rgba(192, 57, 43, 0.35),
+        inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.clientCardBlocked::before {
+    content: '';
+    position: absolute;
+    top: -60%;
+    left: -60%;
+    width: 60%;
+    height: 220%;
+    background: rgba(255, 255, 255, 0.12);
+    transform: rotate(25deg);
+    pointer-events: none;
+    border-radius: 50%;
+}
+
+.clientCardBlocked:hover {
+    box-shadow:
+        0 20px 55px rgba(192, 57, 43, 0.5),
+        inset 0 1px 1px rgba(255, 255, 255, 0.3) !important;
+    transform: translateY(-5px) scale(1.02) !important;
+    border-color: #e74c3c !important;
+}
+
+.clientCardBlocked .clientInfo h4 {
+    color: #fff !important;
+    -webkit-text-fill-color: #fff !important;
+    text-shadow: 0 1px 4px rgba(120, 0, 0, 0.3);
+    animation: none !important;
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+}
+
+.clientCardBlocked .clientInfo p {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+
+.clientCardBlocked .clientPasswordLabel {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.clientCardBlocked .clientPasswordValue {
+    color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.clientCardBlocked .clientPasswordToggle {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.clientCardBlocked .clientPasswordToggle:hover {
+    background: rgba(255, 255, 255, 0.2) !important;
+}
+
+.clientCardBlocked .clientIcon {
+    background: rgba(255, 255, 255, 0.25) !important;
+    border: 1px solid rgba(255, 255, 255, 0.4) !important;
+    color: #fff !important;
+}
+
+.clientCardBlocked .clientCardTop {
+    border-bottom-color: rgba(255, 255, 255, 0.25) !important;
+}
+
+.clientCardBlocked .btnSaveLux {
+    background: #1A0F0A !important;
+    color: #e74c3c !important;
+    border: none !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25) !important;
+}
+
+.clientCardBlocked .btnSaveLux:hover {
+    background: #2d1a0e !important;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.3) !important;
+}
+
+.clientCardBlocked .btnCancel {
+    background: #fff !important;
+    color: #1A0F0A !important;
+    border-color: rgba(192, 57, 43, 0.3) !important;
+}
+
+.clientCardBlocked .btnCancel:hover {
+    background: #FFF5F5 !important;
+}
+
+.clientCardBlocked .btnDeleteLux {
+    background: #fff !important;
+    color: #8B0000 !important;
+    border-color: rgba(139, 0, 0, 0.4) !important;
+}
+
+.clientCardBlocked .btnDeleteLux:hover {
+    background: #8B0000 !important;
+    color: #fff !important;
+    border-color: transparent !important;
+}
+
 
 .clientIcon {
     width: 60px;
@@ -2669,6 +2808,225 @@
     background: white;
 }
 
+/* ── Reservation modal – modern dropdowns & date picker ── */
+.reservationDropdownMenu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    right: 0;
+    background: rgba(255, 253, 249, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(223, 185, 109, 0.25);
+    border-radius: 16px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.12), 0 4px 16px rgba(223, 185, 109, 0.1);
+    z-index: 200;
+    overflow: hidden;
+    max-height: 240px;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.reservationDropdownMenu::-webkit-scrollbar { display: none; }
+
+.reservationDropdownSearch {
+    padding: 12px 14px 8px;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+    position: sticky;
+    top: 0;
+    background: rgba(255, 253, 249, 0.98);
+    z-index: 1;
+}
+
+.reservationDropdownSearch input {
+    width: 100%;
+    padding: 9px 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(223, 185, 109, 0.3);
+    background: white;
+    font-size: 0.88rem;
+    color: #2A211C;
+    outline: none;
+    font-family: 'Outfit', sans-serif;
+    transition: border-color 0.2s;
+}
+
+.reservationDropdownSearch input:focus {
+    border-color: #DFB96D;
+    box-shadow: 0 0 0 3px rgba(223, 185, 109, 0.12);
+}
+
+.reservationDropdownList {
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.reservationDropdownItem {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+    font-size: 0.9rem;
+    color: #2A211C;
+}
+
+.reservationDropdownItem:hover {
+    background: rgba(223, 185, 109, 0.1);
+    color: #1A0F0A;
+}
+
+.reservationDropdownItem .itemName {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.reservationDropdownItem .itemSub {
+    font-size: 0.78rem;
+    color: #9a8878;
+    margin-left: 8px;
+}
+
+.reservationDropdownItem .itemPrice {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: #DFB96D;
+}
+
+.reservationDropdownItem .itemDot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: 10px;
+}
+
+/* Date picker panel – inline, not floating */
+.reservationDatePanel {
+    margin-top: 8px;
+    background: rgba(255, 253, 249, 0.98);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(223, 185, 109, 0.25);
+    border-radius: 20px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.1);
+    padding: 20px;
+    overflow: hidden;
+}
+
+.reservationCalHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+}
+
+.reservationCalHeader strong {
+    font-family: 'Playfair Display', serif;
+    font-size: 1rem;
+    color: #1A0F0A;
+    text-transform: capitalize;
+}
+
+.reservationCalNavBtn {
+    background: rgba(223, 185, 109, 0.1);
+    border: 1px solid rgba(223, 185, 109, 0.2);
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.2s;
+    color: #DFB96D;
+}
+
+.reservationCalNavBtn:hover {
+    background: rgba(223, 185, 109, 0.2);
+}
+
+.reservationCalGrid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    margin-bottom: 20px;
+}
+
+.reservationCalDayLabel {
+    text-align: center;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #9a8878;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding-bottom: 6px;
+}
+
+.reservationCalDay {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    color: #2A211C;
+    font-weight: 500;
+    min-height: 36px;
+}
+
+.reservationCalDay:hover {
+    background: rgba(223, 185, 109, 0.15);
+}
+
+.reservationCalDaySelected {
+    background: #DFB96D !important;
+    color: white !important;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(223, 185, 109, 0.35);
+}
+
+.reservationTimeGrid {
+    border-top: 1px solid rgba(0,0,0,0.06);
+    padding-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+}
+
+.reservationTimeSlot {
+    text-align: center;
+    padding: 8px 6px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    font-weight: 600;
+    transition: all 0.15s;
+    color: #4A3728;
+    background: rgba(0,0,0,0.03);
+}
+
+.reservationTimeSlot:hover {
+    background: rgba(223, 185, 109, 0.1);
+    border-color: rgba(223, 185, 109, 0.3);
+    color: #DFB96D;
+}
+
+.reservationTimeSlotSelected {
+    background: rgba(223, 185, 109, 0.12) !important;
+    border-color: #DFB96D !important;
+    color: #DFB96D !important;
+    font-weight: 700;
+}
+
 .customDropdown {
     position: relative;
     min-width: 140px;
@@ -3364,9 +3722,10 @@
 
 .intelHeader {
     display: flex;
+    justify-content: space-between;
     align-items: center;
     gap: 15px;
-    margin-bottom: 30px;
+    margin-bottom: 25px;
 }
 
 .intelHeader h3 {
@@ -4065,15 +4424,23 @@
         border: 1px solid rgba(226, 180, 92, 0.18);
         border-radius: 32px;
         flex-direction: row;
-        justify-content: space-around;
+        justify-content: flex-start; /* Changed from space-around to allow scrolling */
         align-items: center;
-        padding: 0 12px;
-        gap: 4px;
+        padding: 0 16px;
+        gap: 8px; /* Slightly more gap for touch targets */
         box-shadow:
             0 20px 60px rgba(0, 0, 0, 0.7),
             0 0 0 1px rgba(226, 180, 92, 0.05) inset,
             0 1px 0 rgba(255, 255, 255, 0.05) inset;
         z-index: 1001;
+        overflow-x: auto; /* Enable horizontal scrolling */
+        overflow-y: hidden;
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+    }
+
+    .nav::-webkit-scrollbar {
+        display: none; /* Chrome, Safari and Opera */
     }
 
     .navItem {
@@ -4185,7 +4552,7 @@
         display: flex;
         flex-direction: column;
         align-items: flex-start;
-        justify-content: flex-end;
+        justify-content: center; /* Move to center/top instead of flex-end */
         text-align: left;
         position: relative;
     }
@@ -4197,9 +4564,8 @@
     }
 
     .heroContent {
-        padding: 0 22px 22px;
-        /* Leave space on the right for the loyalty orb (85px + 20px margin + 10px gap) */
-        max-width: calc(100% - 115px);
+        padding: 20px 22px; /* More top space, less bottom space */
+        max-width: calc(100% - 60px); /* More width for text */
     }
 
     .tierBadge {
@@ -4210,13 +4576,14 @@
     }
 
     .welcomeText {
-        font-size: 1.75rem;
-        line-height: 1.2;
-        margin-bottom: 6px;
-        letter-spacing: -0.3px;
+        font-size: 1.85rem;
+        line-height: 1.1;
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
         font-weight: 900;
         color: white;
-        word-break: break-word;
+        word-break: normal; /* Don't break words */
+        overflow-wrap: break-word;
     }
 
     .heroSub {
@@ -4503,6 +4870,17 @@
         border-radius: 24px;
     }
 
+    .intelHeader {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    .intelHeader > div {
+        width: 100%;
+        justify-content: space-between;
+    }
+
     .intelHeader h3 {
         font-size: 0.95rem;
     }
@@ -4570,6 +4948,7 @@
         justify-content: center;
         z-index: 1000;
         padding: 0;
+        padding-bottom: 96px; /* clear the floating nav bar */
     }
 
     .modal,
@@ -4578,7 +4957,7 @@
         max-width: 100%;
         border-radius: 28px 28px 0 0;
         padding: 0;
-        max-height: 92dvh;
+        max-height: calc(92dvh - 96px);
         display: flex;
         flex-direction: column;
         overflow: hidden;
@@ -4818,13 +5197,10 @@
 
     /* Modal action buttons */
     .modalActions {
-        position: sticky;
-        bottom: 0;
-        background: white;
-        padding: 16px 18px;
+        padding: 16px 18px 32px;
         gap: 12px;
-        margin-top: 4px;
         flex-shrink: 0;
+        background: linear-gradient(to top, #F7EAD0 85%, transparent);
         border-top: 1px solid rgba(0,0,0,0.05);
     }
 
@@ -4850,6 +5226,37 @@
 
     .modalWide .modalBody {
         padding: 14px 14px 0 !important;
+    }
+
+    /* Reservation modal mobile adjustments */
+    .reservationDropdownMenu {
+        border-radius: 14px;
+        max-height: 200px;
+    }
+
+    .reservationDatePanel {
+        padding: 14px;
+        border-radius: 16px;
+    }
+
+    .reservationCalDay {
+        font-size: 0.8rem;
+        min-height: 38px;
+        border-radius: 10px;
+    }
+
+    .reservationCalGrid {
+        gap: 3px;
+    }
+
+    .reservationTimeGrid {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6px;
+    }
+
+    .reservationTimeSlot {
+        padding: 9px 4px;
+        font-size: 0.8rem;
     }
 }
 
@@ -5762,9 +6169,7 @@
     }
 
     .intelStatus {
-        position: absolute !important;
-        top: 20px !important;
-        right: 20px !important;
+        position: static !important;
         font-size: 0.6rem !important;
         padding: 4px 10px !important;
     }
@@ -6320,5 +6725,109 @@
         left: 0 !important;
         right: 0 !important;
         z-index: 200 !important;
+    }
+}
+.customDropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    padding: 10px;
+    margin-top: 5px;
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 100;
+    animation: fadeInDropdown 0.2s ease-out;
+}
+
+@media (max-width: 768px) {
+    .customDropdown {
+        z-index: 1000;
+    }
+}
+
+@keyframes fadeInDropdown {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.dropdownItem {
+    padding: 12px 15px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.dropdownItem:hover {
+    background: rgba(223, 185, 109, 0.1);
+}
+
+.dropdownItem strong {
+    font-size: 0.95rem;
+    color: #1a1a1a;
+}
+
+.dropdownItem small {
+    font-size: 0.75rem;
+    color: #8c734b;
+}
+
+.agendaBtn {
+    background: #DFB96D;
+    color: #1A0F0A;
+    padding: 8px 16px;
+    border-radius: 50px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(223,185,109,0.3);
+    transition: all 0.3s ease;
+}
+
+.agendaBtn:hover {
+    background: #E2C48E;
+    transform: translateY(-1px);
+}
+
+.agendaBtnAlt {
+    background: white;
+    color: #1A0F0A;
+    padding: 8px 16px;
+    border-radius: 50px;
+    font-size: 0.8rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(0,0,0,0.05);
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+}
+
+.agendaBtnAlt:hover {
+    background: #f9f9f9;
+}
+
+@media (max-width: 480px) {
+    .agendaBtn span, .agendaBtnAlt span {
+        display: none;
+    }
+    .agendaBtn, .agendaBtnAlt {
+        padding: 8px;
+        width: 36px;
+        height: 36px;
+        justify-content: center;
+        border-radius: 12px;
     }
 }

@@ -59,7 +59,22 @@ import {
     X,
     Eye,
     EyeOff,
+    Check
 } from 'lucide-react';
+
+const GOOGLE_CALENDAR_COLORS = [
+    { id: '1', hex: '#7986cb', name: 'Lavender' },
+    { id: '2', hex: '#33b679', name: 'Sage' },
+    { id: '3', hex: '#8e24aa', name: 'Grape' },
+    { id: '4', hex: '#e67c73', name: 'Flamingo' },
+    { id: '5', hex: '#f6bf26', name: 'Banana' },
+    { id: '6', hex: '#f4511e', name: 'Tangerine' },
+    { id: '7', hex: '#039be5', name: 'Peacock' },
+    { id: '8', hex: '#616161', name: 'Graphite' },
+    { id: '9', hex: '#3f51b5', name: 'Blueberry' },
+    { id: '10', hex: '#0b8043', name: 'Basil' },
+    { id: '11', hex: '#d50000', name: 'Tomato' },
+];
 
 import { useQuery, useMutation } from '@apollo/client/react';
 import { GET_DASHBOARD_DATA, GET_PRODUCTS, GET_WAITING_DATA, GET_ALL_FEEDBACK, GET_CLIENT_NOTES } from '@/graphql/queries';
@@ -89,7 +104,8 @@ import {
     ADD_CLIENT_NOTE_MUTATION,
     UPDATE_RESERVATION_DATE_MUTATION,
     SYNC_GOOGLE_CALENDAR_MUTATION,
-    CONVERT_EXTERNAL_TO_RESERVATION_MUTATION
+    CONVERT_EXTERNAL_TO_RESERVATION_MUTATION,
+    PURCHASE_PRODUCT_MUTATION
 } from '@/graphql/mutations';
 import { signOut, signIn } from 'next-auth/react';
 
@@ -194,7 +210,7 @@ export default function Dashboard() {
 
     const [toggleService] = useMutation(TOGGLE_SERVICE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [removeService] = useMutation(REMOVE_SERVICE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [updateUserRole] = useMutation(UPDATE_USER_ROLE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+
     const [removeUser] = useMutation(REMOVE_USER_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [addService] = useMutation(ADD_SERVICE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [updateUser] = useMutation(UPDATE_USER_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
@@ -202,7 +218,7 @@ export default function Dashboard() {
     const [addProduct] = useMutation(ADD_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [updateProduct] = useMutation(UPDATE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [removeProduct] = useMutation(REMOVE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
-    const [updateReservationStatus] = useMutation(UPDATE_RESERVATION_STATUS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [updateReservationStatus] = useMutation(UPDATE_RESERVATION_STATUS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }, { query: GET_WAITING_DATA, variables: { userId: user?.id } }] });
     const [updateReservationDate] = useMutation(UPDATE_RESERVATION_DATE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [updateSpecialist] = useMutation(UPDATE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [deleteSpecialist] = useMutation(DELETE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
@@ -211,14 +227,16 @@ export default function Dashboard() {
     const [addSpecialist] = useMutation(ADD_PRESTATAIRE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [syncGoogleCalendar] = useMutation(SYNC_GOOGLE_CALENDAR_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [convertExternalToReservation] = useMutation(CONVERT_EXTERNAL_TO_RESERVATION_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [purchaseProduct] = useMutation(PURCHASE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+
+    const getColorHex = (id: string) => GOOGLE_CALENDAR_COLORS.find(c => c.id === id)?.hex || 'transparent';
 
     const router = useRouter();
     const [activeTab, setActiveTab] = useState('overview');
     const [selectedStaff, setSelectedStaff] = useState<string | null>(null);
     const [waitingComment, setWaitingComment] = useState('');
     const [cart, setCart] = useState<any[]>([]);
-    const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
-    const [openTierDropdownId, setOpenTierDropdownId] = useState<string | null>(null);
+
     const [visiblePasswordId, setVisiblePasswordId] = useState<string | null>(null);
     const [isCartModalOpen, setIsCartModalOpen] = useState(false);
     const [selectedDayLine, setSelectedDayLine] = useState<string>('');
@@ -272,7 +290,8 @@ export default function Dashboard() {
         hosp_expertise: 95,
         prec_expertise: 95,
         award_badge: 'Meilleur Spécialiste',
-        historique: ''
+        historique: '',
+        calendar_color_id: '1'
     });
     const [editingProduct, setEditingProduct] = useState<any>(null);
     const [isFicheModalOpen, setIsFicheModalOpen] = useState(false);
@@ -281,13 +300,29 @@ export default function Dashboard() {
     const [selectedSpecialistForHistorique, setSelectedSpecialistForHistorique] = useState<any>(null);
     const [isAdminInboxOpen, setIsAdminInboxOpen] = useState(false);
     const [initialChatUserForInbox, setInitialChatUserForInbox] = useState<any>(null);
+    const [isAddReservationModalOpen, setIsAddReservationModalOpen] = useState(false);
+    const [manualReservation, setManualReservation] = useState({
+        userId: '',
+        serviceId: '',
+        prestataireId: '',
+        date: ''
+    });
     const [isClientChatOpen, setIsClientChatOpen] = useState(false);
     const [chatUnreadCount, setChatUnreadCount] = useState(0);
     const [adminUnreadCount, setAdminUnreadCount] = useState(0);
     const chatSseRef = useRef<EventSource | null>(null);
+    const [isManualClientSearchOpen, setIsManualClientSearchOpen] = useState(false);
+    const [isManualServiceSearchOpen, setIsManualServiceSearchOpen] = useState(false);
+    const [isManualSpecialistSearchOpen, setIsManualSpecialistSearchOpen] = useState(false);
+    const [isManualDatePickerOpen, setIsManualDatePickerOpen] = useState(false);
+    const [manualClientSearch, setManualClientSearch] = useState('');
+    const [manualServiceSearch, setManualServiceSearch] = useState('');
+    const [manualSpecialistSearch, setManualSpecialistSearch] = useState('');
+    const [selectedManualDate, setSelectedManualDate] = useState(new Date());
+    const [selectedManualTime, setSelectedManualTime] = useState('09:00');
     const { t, language, setLanguage } = useLanguage();
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct' | 'ficheClient' | 'newClient' | 'editClient') => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct' | 'ficheClient' | 'newClient' | 'editClient' | 'editSpecialist') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -317,6 +352,8 @@ export default function Dashboard() {
                 setNewClient({ ...newClient, image: base64String });
             } else if (type === 'editClient') {
                 setEditingClient({ ...editingClient, image: base64String });
+            } else if (type === 'editSpecialist') {
+                setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, image: base64String });
             }
             setIsUploading(false);
         };
@@ -496,6 +533,17 @@ export default function Dashboard() {
         setIsFicheModalOpen(false);
         setBookingService(null);
         setSelectedClientForFiche(null);
+        setIsManualClientSearchOpen(false);
+        setIsManualServiceSearchOpen(false);
+        setIsManualSpecialistSearchOpen(false);
+        setIsManualDatePickerOpen(false);
+    };
+
+    const closeAllManualSelects = () => {
+        setIsManualClientSearchOpen(false);
+        setIsManualServiceSearchOpen(false);
+        setIsManualSpecialistSearchOpen(false);
+        setIsManualDatePickerOpen(false);
     };
 
     const handleSync = async () => {
@@ -955,6 +1003,8 @@ export default function Dashboard() {
                         ] : []),
                         { id: 'providers', icon: <Users size={22} />, label: t('specialists') },
                         { id: 'history', icon: <Clock size={22} />, label: t('history') },
+                        { id: 'maintenant', icon: <Sparkles size={22} />, label: t('maintenant') },
+                        { id: 'products', icon: <Gift size={22} />, label: t('products') },
                         ...(user?.role !== 'admin' ? [
                             { id: 'fiche', icon: <ClipboardList size={22} />, label: 'Fiche' },
                             { id: 'notes', icon: <PenLine size={22} />, label: 'Mes Notes' }
@@ -988,10 +1038,12 @@ export default function Dashboard() {
                         animate={{ opacity: 1, y: 0 }}
                         className={styles.heroContent}
                     >
-                        <div className={styles.tierBadge}>
-                            <Award size={16} />
-                            <span>{userLoyalty.tier}</span>
-                        </div>
+                        {user?.role !== 'admin' && (
+                            <div className={styles.tierBadge}>
+                                <Award size={16} />
+                                <span>{userLoyalty.tier}</span>
+                            </div>
+                        )}
                         <h1 className={styles.welcomeText}>
                             {t('welcomeBack')}<span className="text-gold">{user?.name || 'Guest'}</span>
                         </h1>
@@ -1139,29 +1191,24 @@ export default function Dashboard() {
                                                             letterSpacing: '1px'
                                                         }}>LIVE</div>
                                                     </div>
-                                                    <button 
-                                                        onClick={handleSync}
-                                                        className={styles.googleSyncBtnLux}
-                                                        style={{
-                                                            background: 'white',
-                                                            border: '1px solid #eee',
-                                                            padding: '8px 18px',
-                                                            borderRadius: '30px',
-                                                            fontSize: '0.8rem',
-                                                            fontWeight: '600',
-                                                            color: '#333',
-                                                            display: 'flex',
-                                                            alignItems: 'center',
-                                                            gap: '8px',
-                                                            boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
-                                                            transition: 'all 0.3s ease'
-                                                        }}
-                                                    >
-                                                        <RefreshCcw size={14} color="#DFB96D" />
-                                                        <span>Synchroniser</span>
-                                                    </button>
+                                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); setIsAddReservationModalOpen(true); }}
+                                                            className={styles.agendaBtn}
+                                                        >
+                                                            <Plus size={16} />
+                                                            <span>Ajouter</span>
+                                                        </button>
+                                                        <button 
+                                                            onClick={handleSync}
+                                                            className={styles.agendaBtnAlt}
+                                                        >
+                                                            <RefreshCcw size={14} color="#DFB96D" />
+                                                            <span>Synchroniser</span>
+                                                        </button>
+                                                    </div>
                                                 </div>
-                                                <div className={styles.intelList}>
+                                            <div className={styles.intelList}>
                                                     {getTodaysAgenda().slice(0, 3).map((res: any) => (
                                                         <div key={res.id} className={styles.intelItem} style={res.type === 'external' ? {
                                                             background: 'linear-gradient(135deg, rgba(223, 185, 109, 0.03) 0%, rgba(223, 185, 109, 0.08) 100%)',
@@ -1580,7 +1627,13 @@ export default function Dashboard() {
                                             >
                                                 <div className={styles.staffMain}>
                                                     <div className={styles.staffImgContainer}>
-                                                        <img src={staff.image} alt={staff.name} />
+                                                        {staff.image ? (
+                                                            <img src={staff.image} alt={staff.name} />
+                                                        ) : (
+                                                            <div className={styles.staffImgPlaceholder} style={{ background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', width: '100%' }}>
+                                                                <UserCheck color="var(--accent)" size={48} opacity={0.3} />
+                                                            </div>
+                                                        )}
                                                         <div className={styles.staffScore}>
                                                             <Star size={14} fill="currentColor" />
                                                             <span>{staff.rating}</span>
@@ -1592,7 +1645,21 @@ export default function Dashboard() {
                                                         style={{ cursor: 'pointer' }}
                                                     >
                                                         <span className={styles.staffRole}>{staff.role}</span>
-                                                        <h3>{staff.name}</h3>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                            <h3>{staff.name}</h3>
+                                                            {user?.role === 'admin' && staff.calendar_color_id && (
+                                                                <div 
+                                                                    title="Couleur Agenda"
+                                                                    style={{ 
+                                                                        width: '12px', 
+                                                                        height: '12px', 
+                                                                        borderRadius: '50%', 
+                                                                        background: getColorHex(staff.calendar_color_id),
+                                                                        boxShadow: '0 0 5px rgba(0,0,0,0.2)'
+                                                                    }} 
+                                                                />
+                                                            )}
+                                                        </div>
                                                         <p>{staff.specialty}</p>
                                                         <div className={styles.staffActions} style={{ gap: '10px' }}>
                                                             <button
@@ -1663,54 +1730,53 @@ export default function Dashboard() {
                                 className={styles.tabContent}
                             >
                                 <div className={styles.sectionHeader}>
-                                    <h2>{t('recentVisits')}</h2>
+                                    <h2>Toutes les Réservations</h2>
                                     <div className={styles.headerLine} />
                                 </div>
                                 <div className={styles.historyTimeline}>
-                                    {serviceHistory.map((visit: any) => {
-                                        const staff = prestataires.find((p: any) => p.id === visit.prestataireId);
-                                        return (
-                                            <div key={visit.id} className={styles.timelineItem}>
-                                                <div className={styles.timelinePoint} />
+                                    {(() => {
+                                        const allRes = user?.role === 'admin'
+                                            ? [...(data?.allReservations || [])].sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                                            : [...(waitingData?.myReservations || [])].sort((a: any, b: any) => {
+                                                const da = new Date(a.date.includes?.('-') ? a.date : parseInt(a.date)).getTime();
+                                                const db = new Date(b.date.includes?.('-') ? b.date : parseInt(b.date)).getTime();
+                                                return db - da;
+                                            });
+
+                                        if (allRes.length === 0) return (
+                                            <p style={{ opacity: 0.5, textAlign: 'center', padding: '40px' }}>Aucune réservation trouvée.</p>
+                                        );
+
+                                        return allRes.map((res: any) => (
+                                            <div key={res.id} className={styles.timelineItem}>
+                                                <div className={styles.timelinePoint} style={{ background: res.status === 'confirmed' ? '#D1FAE5' : res.status === 'cancelled' ? '#FEE2E2' : res.status === 'paid' ? '#DFE8FF' : '#FEF3C7' }} />
                                                 <div className={styles.timelineCard}>
                                                     <div className={styles.timeMeta}>
-                                                        <Clock size={16} />
-                                                        <span>{new Date(visit.date).toLocaleDateString(language, { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                                                        <Calendar size={16} />
+                                                        <span>{new Date(res.date).toLocaleDateString(language, { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                                        <span style={{ 
+                                                            marginLeft: 'auto', 
+                                                            fontSize: '0.7rem', 
+                                                            fontWeight: 'bold', 
+                                                            padding: '2px 8px', 
+                                                            borderRadius: '10px',
+                                                            background: res.status === 'confirmed' ? '#D1FAE5' : res.status === 'cancelled' ? '#FEE2E2' : res.status === 'paid' ? '#DFE8FF' : '#FEF3C7',
+                                                            color: res.status === 'confirmed' ? '#065F46' : res.status === 'cancelled' ? '#991B1B' : res.status === 'paid' ? '#1E40AF' : '#92400E'
+                                                        }}>
+                                                            {res.status?.toUpperCase()}
+                                                        </span>
                                                     </div>
                                                     <div className={styles.timeContent}>
                                                         <div className={styles.timeTitle}>
-                                                            <h3>{visit.service}</h3>
-                                                            <p>{t('with')} {staff?.name}</p>
+                                                            <h3>{res.service?.name || res.externalTitle || 'Service'}</h3>
+                                                            <p>{t('with')} {res.prestataire?.name || 'N/A'} {user?.role === 'admin' && res.user?.name ? `· Client: ${res.user.name}` : ''}</p>
                                                         </div>
-                                                        <div className={styles.timePoints}>+{visit.points} PTS</div>
-                                                    </div>
-                                                    <div style={{ display: 'flex', gap: '15px' }}>
-                                                        <button
-                                                            className={styles.addCommentLink}
-                                                            onClick={() => {
-                                                                setSelectedStaff(staff?.id || null);
-                                                                setIsRatingModalOpen(true);
-                                                            }}
-                                                        >
-                                                            <MessageSquare size={16} /> {t('addComment')}
-                                                        </button>
-                                                        <button
-                                                            className={styles.addCommentLink}
-                                                            onClick={async () => {
-                                                                const amount = prompt(t('tipAmount'));
-                                                                if (amount) {
-                                                                    await addTip({ variables: { userId: user?.id, prestataireId: staff?.id, amount: parseFloat(amount) } });
-                                                                    swalLux('success', t('tipSent'));
-                                                                }
-                                                            }}
-                                                        >
-                                                            <Gift size={16} /> {t('tip')}
-                                                        </button>
+                                                        <div className={styles.timePoints} style={{ color: '#DFB96D' }}>{res.service?.price || 0} DT</div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        );
-                                    })}
+                                        ));
+                                    })()}
                                 </div>
                             </motion.div>
                         )}
@@ -1723,19 +1789,157 @@ export default function Dashboard() {
                                 exit={{ opacity: 0 }}
                                 className={styles.tabContent}
                             >
-                                <div className={styles.sectionHeader}>
-                                    <h2>{t('liveLounge')}</h2>
-                                    <div className={styles.headerLine} />
-                                </div>
+                                {user?.role === 'admin' ? (() => {
+                                    /* ── ADMIN: reservations in the current hour slot ── */
+                                    const now = new Date();
+                                    const slotStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
+                                    const slotEnd   = new Date(slotStart.getTime() + 60 * 60 * 1000);
+                                    const slotLabel = `${slotStart.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })} – ${slotEnd.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}`;
 
-                                {(() => {
-                                    const todayStr = formatLocalDate(new Date());
+                                    const parseDate = (raw: string) => new Date(raw.includes('-') || raw.includes('T') ? raw : parseInt(raw));
+
+                                    const slotRes = (data?.allReservations || []).filter((r: any) => {
+                                        try {
+                                            const d = parseDate(r.date).getTime();
+                                            return d >= slotStart.getTime() && d < slotEnd.getTime();
+                                        } catch { return false; }
+                                    }).sort((a: any, b: any) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+
+                                    const statusMeta = (status: string) => {
+                                        switch (status?.toLowerCase()) {
+                                            case 'confirmed': return { label: 'CONFIRMÉ',   bg: '#D1FAE5', color: '#065F46', dot: '#10B981' };
+                                            case 'cancelled': return { label: 'ANNULÉ',     bg: '#FEE2E2', color: '#991B1B', dot: '#EF4444' };
+                                            case 'arrived':   return { label: 'ARRIVÉ',     bg: '#DBEAFE', color: '#1E40AF', dot: '#3B82F6' };
+                                            default:          return { label: 'EN ATTENTE', bg: '#FEF3C7', color: '#92400E', dot: '#F59E0B' };
+                                        }
+                                    };
+
+                                    return (
+                                        <>
+                                            {/* Live clock header */}
+                                            <div style={{ background: 'linear-gradient(135deg, #1A0F0A 0%, #2D1A0E 100%)', borderRadius: '20px', padding: '20px', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+                                                <div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#10B981', boxShadow: '0 0 0 3px rgba(16,185,129,0.3)' }} />
+                                                        <span style={{ fontSize: '0.68rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '2px', color: '#10B981' }}>EN DIRECT</span>
+                                                    </div>
+                                                    <div style={{ fontFamily: "'Playfair Display', serif", fontSize: '1.25rem', color: '#FFFDF9', fontWeight: '700', lineHeight: 1.2 }}>
+                                                        Créneau actuel
+                                                    </div>
+                                                    <div style={{ fontSize: '0.9rem', color: '#DFB96D', fontWeight: '700', marginTop: '4px' }}>{slotLabel}</div>
+                                                </div>
+                                                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                                                    <div style={{ fontSize: '2.2rem', fontWeight: '800', fontFamily: 'monospace', color: '#DFB96D', lineHeight: 1 }}>
+                                                        {now.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
+                                                    </div>
+                                                    <div style={{ fontSize: '0.72rem', color: 'rgba(255,253,249,0.5)', marginTop: '4px', textTransform: 'capitalize' }}>
+                                                        {now.toLocaleDateString(language, { weekday: 'long', day: 'numeric', month: 'long' })}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {slotRes.length > 0 ? (
+                                                <>
+                                                    <div style={{ fontSize: '0.78rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#9a8878', marginBottom: '14px' }}>
+                                                        {slotRes.length} réservation{slotRes.length > 1 ? 's' : ''} dans ce créneau
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                                        {slotRes.map((r: any, idx: number) => {
+                                                            const meta = statusMeta(r.status);
+                                                            const rDate = parseDate(r.date);
+                                                            return (
+                                                                <motion.div
+                                                                    key={r.id}
+                                                                    initial={{ opacity: 0, y: 16 }}
+                                                                    animate={{ opacity: 1, y: 0 }}
+                                                                    transition={{ delay: idx * 0.06 }}
+                                                                    style={{
+                                                                        background: r.status === 'arrived'
+                                                                            ? 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)'
+                                                                            : 'linear-gradient(135deg, #FFFDF9 0%, #FDF6E8 100%)',
+                                                                        border: r.status === 'arrived'
+                                                                            ? '1px solid rgba(59,130,246,0.35)'
+                                                                            : '1px solid rgba(223,185,109,0.22)',
+                                                                        borderRadius: '18px',
+                                                                        overflow: 'hidden',
+                                                                        boxShadow: r.status === 'arrived'
+                                                                            ? '0 4px 20px rgba(59,130,246,0.12)'
+                                                                            : '0 4px 20px rgba(0,0,0,0.05)',
+                                                                        position: 'relative',
+                                                                    }}
+                                                                >
+                                                                    {/* Left accent bar — blue for arrived, gold otherwise */}
+                                                                    <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: r.status === 'arrived' ? '#3B82F6' : '#DFB96D' }} />
+
+                                                                    <div style={{ padding: '16px 16px 16px 20px' }}>
+                                                                        {/* Row 1: time + service name + status */}
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                                                                            <span style={{ fontSize: '1.05rem', fontWeight: '800', fontFamily: 'monospace', color: '#DFB96D', flexShrink: 0 }}>
+                                                                                {rDate.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
+                                                                            </span>
+                                                                            <span style={{ flex: 1, fontSize: '0.95rem', fontWeight: '700', color: '#1A0F0A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                                {r.service?.name}
+                                                                            </span>
+                                                                            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', background: meta.bg, color: meta.color, borderRadius: '20px', padding: '4px 10px', fontSize: '0.68rem', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                                                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
+                                                                                {meta.label}
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {/* Row 2: avatar + client · specialist · duration */}
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                            {r.prestataire?.image ? (
+                                                                                <img src={r.prestataire.image} style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1.5px solid #DFB96D', flexShrink: 0, objectFit: 'cover' }} />
+                                                                            ) : (
+                                                                                <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1.5px solid rgba(223,185,109,0.4)', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                                                    <UserCheck color="#DFB96D" size={16} />
+                                                                                </div>
+                                                                            )}
+                                                                            <div style={{ flex: 1, minWidth: 0 }}>
+                                                                                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#2A211C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                                                    {r.user?.name || 'Client'}
+                                                                                </div>
+                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'nowrap', overflow: 'hidden' }}>
+                                                                                    {r.prestataire?.name && (
+                                                                                        <span style={{ fontSize: '0.78rem', color: '#73685F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.prestataire.name}</span>
+                                                                                    )}
+                                                                                    {r.service?.duration && (
+                                                                                        <>
+                                                                                            <span style={{ color: '#DFB96D', fontSize: '0.65rem', flexShrink: 0 }}>•</span>
+                                                                                            <span style={{ fontSize: '0.75rem', color: '#9a8878', flexShrink: 0 }}>{r.service.duration}</span>
+                                                                                        </>
+                                                                                    )}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </motion.div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <div className={styles.card} style={{ textAlign: 'center', padding: '60px 20px' }}>
+                                                    <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🕐</div>
+                                                    <h3 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>Aucune réservation sur ce créneau</h3>
+                                                    <p style={{ color: '#888', maxWidth: '340px', margin: '0 auto', fontSize: '0.9rem' }}>
+                                                        Pas de rendez-vous entre {slotLabel} aujourd'hui.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </>
+                                    );
+                                })() : (() => {
+                                    /* ── CLIENT: their own reservations for today ── */
+                                    const now = new Date();
+                                    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                                    const endOfToday = startOfToday + 24 * 60 * 60 * 1000;
+
                                     const todayRes = waitingData?.myReservations?.filter((r: any) => {
                                         try {
-                                            // Robust date parsing for both ISO strings and numeric timestamps
                                             const rawDate = r.date;
-                                            const d = new Date(rawDate.includes('-') || rawDate.includes('T') ? rawDate : parseInt(rawDate));
-                                            return formatLocalDate(d) === todayStr;
+                                            const d = new Date(rawDate.includes('-') || rawDate.includes('T') ? rawDate : parseInt(rawDate)).getTime();
+                                            return d >= startOfToday && d < endOfToday;
                                         } catch (e) { return false; }
                                     });
 
@@ -1760,27 +1964,44 @@ export default function Dashboard() {
                                                             boxShadow: '0 20px 40px rgba(0,0,0,0.05)',
                                                             textAlign: 'center',
                                                             position: 'relative',
-                                                            overflow: 'hidden'
                                                         }}
                                                     >
-                                                        <div style={{ position: 'absolute', top: 0, right: 0, padding: '15px 30px', background: r.status === 'confirmed' ? '#D1FAE5' : '#FEF3C7', color: r.status === 'confirmed' ? '#065F46' : '#92400E', borderRadius: '0 0 0 30px', fontWeight: '800', letterSpacing: '1px', fontSize: '0.8rem' }}>
-                                                            {r.status === 'confirmed' ? 'CONFIRMÉ' : 'EN ATTENTE'}
-                                                        </div>
-
+                                                        {(() => {
+                                                            const status = r.status?.toLowerCase();
+                                                            let label = 'EN ATTENTE';
+                                                            let bg = '#FEF3C7';
+                                                            let color = '#92400E';
+                                                            if (status === 'confirmed') { label = 'CONFIRMÉ'; bg = '#D1FAE5'; color = '#065F46'; }
+                                                            else if (status === 'cancelled') { label = 'ANNULÉ'; bg = '#FEE2E2'; color = '#991B1B'; }
+                                                            else if (status === 'arrived') { label = 'ARRIVÉ'; bg = '#DBEAFE'; color = '#1E40AF'; }
+                                                            else if (r.status) { label = r.status.toUpperCase(); bg = '#F3F4F6'; color = '#374151'; }
+                                                            return (
+                                                                <div style={{ position: 'absolute', top: 0, right: 0, padding: '15px 30px', background: bg, color: color, borderRadius: '0 0 0 30px', fontWeight: '800', letterSpacing: '1px', fontSize: '0.8rem' }}>
+                                                                    {label}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                         <div style={{ margin: '0 auto 25px', width: '100px', height: '100px', borderRadius: '50%', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem', boxShadow: 'inset 0 0 20px rgba(223, 185, 109, 0.2)' }}>
                                                             {r.service.name.toLowerCase().includes('massage') ? '💆‍♀️' : '✨'}
                                                         </div>
-
-                                                        <h2 style={{ fontSize: '2.5rem', marginBottom: '10px', color: 'var(--primary)' }}>{r.service.name}</h2>
+                                                        <h2 style={{ fontSize: '2.5rem', marginBottom: '5px', color: 'var(--primary)' }}>{r.service.name}</h2>
+                                                        <div style={{ fontSize: '1rem', color: '#666', marginBottom: '15px', fontWeight: '500', opacity: 0.8 }}>
+                                                            {new Date(r.date.includes('-') ? r.date : parseInt(r.date)).toLocaleDateString(language, { weekday: 'long', day: 'numeric', month: 'long' })}
+                                                        </div>
                                                         <div style={{ fontSize: '1.2rem', color: '#DFB96D', fontWeight: '600', marginBottom: '30px' }}>
                                                             {new Date(r.date.includes('-') ? r.date : parseInt(r.date)).toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
                                                         </div>
-
                                                         <div style={{ display: 'flex', justifyContent: 'center', gap: '40px', alignItems: 'center', paddingTop: '30px', borderTop: '1px solid rgba(0,0,0,0.05)' }}>
                                                             <div style={{ textAlign: 'left' }}>
                                                                 <div style={{ fontSize: '0.8rem', color: '#999', textTransform: 'uppercase', letterSpacing: '1px' }}>Praticien</div>
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '5px' }}>
-                                                                    <img src={r.prestataire.image} style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid #DFB96D' }} />
+                                                                    {r.prestataire.image ? (
+                                                                        <img src={r.prestataire.image} style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid #DFB96D' }} />
+                                                                    ) : (
+                                                                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid #DFB96D', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                            <UserCheck color="#DFB96D" size={18} />
+                                                                        </div>
+                                                                    )}
                                                                     <span style={{ fontWeight: '700' }}>{r.prestataire.name}</span>
                                                                 </div>
                                                             </div>
@@ -1789,52 +2010,57 @@ export default function Dashboard() {
                                                                 <div style={{ fontWeight: '700', marginTop: '5px', fontSize: '1.1rem' }}>{r.service.duration || '60 mins'}</div>
                                                             </div>
                                                         </div>
-
-                                                        <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'center', gap: '20px' }}>
-                                                            <button className="btn-lux" style={{ padding: '15px 40px', fontSize: '1rem' }} onClick={() => swalLux('info', 'Arrivée', 'Veuillez vous présenter à la réception à votre arrivée.')}>
-                                                                SIGNALER MON ARRIVÉE
-                                                            </button>
-                                                            <a href="tel:+21671000000" className="btn-lux" style={{ 
-                                                                padding: '15px 40px', 
-                                                                fontSize: '1rem', 
-                                                                background: 'transparent', 
-                                                                border: '1px solid #DFB96D', 
-                                                                color: '#DFB96D', 
-                                                                textDecoration: 'none', 
-                                                                display: 'inline-flex', 
-                                                                alignItems: 'center', 
-                                                                gap: '10px' 
-                                                            }}>
+                                                        <div style={{ marginTop: '40px', display: 'flex', justifyContent: 'center', gap: '20px', flexWrap: 'wrap' }}>
+                                                            {r.status === 'arrived' ? (
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#DBEAFE', color: '#1E40AF', borderRadius: '50px', padding: '14px 32px', fontWeight: '800', fontSize: '0.9rem', letterSpacing: '1px' }}>
+                                                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#3B82F6' }} />
+                                                                    VOUS ÊTES SIGNALÉ(E) ARRIVÉ(E)
+                                                                </div>
+                                                            ) : (
+                                                                <button
+                                                                    className="btn-lux"
+                                                                    style={{ padding: '15px 40px', fontSize: '1rem' }}
+                                                                    onClick={async () => {
+                                                                        const result = await Swal.fire({
+                                                                            title: 'Signaler votre arrivée ?',
+                                                                            text: 'Confirmer que vous êtes bien arrivé(e) au spa.',
+                                                                            icon: 'question',
+                                                                            showCancelButton: true,
+                                                                            confirmButtonColor: '#DFB96D',
+                                                                            cancelButtonColor: '#73685F',
+                                                                            confirmButtonText: 'Oui, je suis là !',
+                                                                            cancelButtonText: 'Annuler',
+                                                                            background: '#F8F5F0',
+                                                                            color: '#433422',
+                                                                        });
+                                                                        if (result.isConfirmed) {
+                                                                            try {
+                                                                                await updateReservationStatus({ variables: { id: r.id, status: 'arrived' } });
+                                                                                Swal.fire({
+                                                                                    title: 'Bienvenue ! 🌿',
+                                                                                    text: "Votre arrivée a été signalée. L'équipe Vendôme vous accueille.",
+                                                                                    icon: 'success',
+                                                                                    confirmButtonColor: '#DFB96D',
+                                                                                    background: '#F8F5F0',
+                                                                                    color: '#433422',
+                                                                                });
+                                                                            } catch {
+                                                                                swalLux('error', 'Erreur', "Impossible de signaler l'arrivée.");
+                                                                            }
+                                                                        }
+                                                                    }}
+                                                                >
+                                                                    SIGNALER MON ARRIVÉE
+                                                                </button>
+                                                            )}
+                                                            <a href="tel:+21671000000" className="btn-lux" style={{ padding: '15px 40px', fontSize: '1rem', background: 'transparent', border: '1px solid #DFB96D', color: '#DFB96D', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '10px' }}>
                                                                 <Phone size={18} /> APPELEZ
                                                             </a>
                                                             {r.status === 'pending' && (
-                                                                <button 
-                                                                    className="btn-lux" 
-                                                                    style={{ 
-                                                                        padding: '15px 40px', 
-                                                                        fontSize: '1rem', 
-                                                                        background: 'rgba(255, 68, 68, 0.1)', 
-                                                                        border: '1px solid #ff4444', 
-                                                                        color: '#ff4444' 
-                                                                    }}
+                                                                <button className="btn-lux" style={{ padding: '15px 40px', fontSize: '1rem', background: 'rgba(255, 68, 68, 0.1)', border: '1px solid #ff4444', color: '#ff4444' }}
                                                                     onClick={async () => {
-                                                                        Swal.fire({
-                                                                            title: 'Annuler la séance ?',
-                                                                            text: 'Voulez-vous vraiment annuler votre rendez-vous ?',
-                                                                            icon: 'warning',
-                                                                            showCancelButton: true,
-                                                                            confirmButtonColor: '#ff4444',
-                                                                            cancelButtonColor: '#DFB96D',
-                                                                            confirmButtonText: 'Oui, annuler',
-                                                                            cancelButtonText: 'Non, garder',
-                                                                            background: '#F8F5F0',
-                                                                            color: '#433422',
-                                                                        }).then(async (result) => {
-                                                                            if (result.isConfirmed) {
-                                                                                await deleteReservation({ variables: { id: r.id } });
-                                                                                swalLux('success', 'Rendez-vous annulé');
-                                                                            }
-                                                                        });
+                                                                        Swal.fire({ title: 'Annuler la séance ?', text: 'Voulez-vous vraiment annuler votre rendez-vous ?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ff4444', cancelButtonColor: '#DFB96D', confirmButtonText: 'Oui, annuler', cancelButtonText: 'Non, garder', background: '#F8F5F0', color: '#433422' })
+                                                                            .then(async (result) => { if (result.isConfirmed) { await deleteReservation({ variables: { id: r.id } }); swalLux('success', 'Rendez-vous annulé'); } });
                                                                     }}
                                                                 >
                                                                     ANNULER
@@ -1994,7 +2220,7 @@ export default function Dashboard() {
                                             data.clients.map((client: any) => (
                                                 <div
                                                     key={client.id}
-                                                    className={`${styles.clientCard} ${openDropdownId === client.id ? styles.clientCardActive : ''} ${client.tier === 'Membre Gold' ? styles.clientCardGold : ''}`}
+                                                    className={`${styles.clientCard} ${client.tier === 'Membre Gold' ? styles.clientCardGold : ''} ${client.is_blocked ? styles.clientCardBlocked : ''}`}
                                                 >
                                                     <div className={styles.clientCardTop}>
                                                         <div className={styles.clientIcon} style={{ overflow: 'hidden', width: '45px', height: '45px', border: '1px solid rgba(223, 185, 109, 0.2)' }}>
@@ -2044,91 +2270,7 @@ export default function Dashboard() {
                                                         </div>
                                                     </div>
                                                     <div className={styles.clientCardActions} style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                                                        <div className={styles.customDropdown}>
-                                                            <button
-                                                                className={styles.dropdownTrigger}
-                                                                onClick={() => {
-                                                                    setOpenTierDropdownId(openTierDropdownId === client.id ? null : client.id);
-                                                                    setOpenDropdownId(null);
-                                                                }}
-                                                                style={{ minWidth: '140px', background: client.tier === 'Membre Gold' ? 'rgba(223, 185, 109, 0.15)' : 'rgba(255,255,255,0.05)' }}
-                                                            >
-                                                                <Star size={14} className={client.tier === 'Membre Gold' ? 'text-gold' : ''} style={{ marginRight: '8px' }} />
-                                                                <span>{client.tier === 'Membre Gold' ? t('goldMember') : t('normalMember')}</span>
-                                                                <ChevronDown
-                                                                    size={16}
-                                                                    className={styles.selectIcon}
-                                                                    style={{ transform: openTierDropdownId === client.id ? 'rotate(180deg)' : 'none' }}
-                                                                />
-                                                            </button>
 
-                                                            <AnimatePresence>
-                                                                {openTierDropdownId === client.id && (
-                                                                    <motion.div
-                                                                        initial={{ opacity: 0, y: -10 }}
-                                                                        animate={{ opacity: 1, y: 0 }}
-                                                                        exit={{ opacity: 0, y: -10 }}
-                                                                        className={styles.dropdownMenu}
-                                                                    >
-                                                                        {[
-                                                                            { value: 'Normal', label: t('normalMember') },
-                                                                            { value: 'Membre Gold', label: t('goldMember') }
-                                                                        ].map((tier) => (
-                                                                            <button
-                                                                                key={tier.value}
-                                                                                className={`${styles.dropdownItem} ${client.tier === tier.value ? styles.dropdownItemActive : ''}`}
-                                                                                onClick={async () => {
-                                                                                    await updateUser({ variables: { userId: client.id, tier: tier.value } });
-                                                                                    setOpenTierDropdownId(null);
-                                                                                }}
-                                                                            >
-                                                                                {tier.label}
-                                                                            </button>
-                                                                        ))}
-                                                                    </motion.div>
-                                                                )}
-                                                            </AnimatePresence>
-                                                        </div>
-                                                        <div className={styles.customDropdown}>
-                                                            <button
-                                                                className={styles.dropdownTrigger}
-                                                                onClick={() => {
-                                                                    setOpenDropdownId(openDropdownId === client.id ? null : client.id);
-                                                                    setOpenTierDropdownId(null);
-                                                                }}
-                                                            >
-                                                                <span>{client.role.toUpperCase()}</span>
-                                                                <ChevronDown
-                                                                    size={16}
-                                                                    className={styles.selectIcon}
-                                                                    style={{ transform: openDropdownId === client.id ? 'rotate(180deg)' : 'none' }}
-                                                                />
-                                                            </button>
-
-                                                            <AnimatePresence>
-                                                                {openDropdownId === client.id && (
-                                                                    <motion.div
-                                                                        initial={{ opacity: 0, y: -10 }}
-                                                                        animate={{ opacity: 1, y: 0 }}
-                                                                        exit={{ opacity: 0, y: -10 }}
-                                                                        className={styles.dropdownMenu}
-                                                                    >
-                                                                        {['client', 'admin', 'provider'].map((role) => (
-                                                                            <button
-                                                                                key={role}
-                                                                                className={`${styles.dropdownItem} ${client.role === role ? styles.dropdownItemActive : ''}`}
-                                                                                onClick={async () => {
-                                                                                    await updateUserRole({ variables: { userId: client.id, role } });
-                                                                                    setOpenDropdownId(null);
-                                                                                }}
-                                                                            >
-                                                                                {role.toUpperCase()}
-                                                                            </button>
-                                                                        ))}
-                                                                    </motion.div>
-                                                                )}
-                                                            </AnimatePresence>
-                                                        </div>
                                                         <button
                                                             className={styles.btnSaveLux}
                                                             style={{ 
@@ -2412,8 +2554,16 @@ export default function Dashboard() {
                                                     background: bookingStaff === p.id ? 'rgba(223, 185, 109, 0.2)' : 'transparent'
                                                 }}
                                             >
-                                                <img src={p.image} alt={p.name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', marginBottom: '5px' }} />
-                                                <div className={styles.specialistName}>{p.name}</div>
+                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                    {p.image ? (
+                                                        <img src={p.image} alt={p.name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', marginBottom: '5px' }} />
+                                                    ) : (
+                                                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '5px' }}>
+                                                            <UserCheck color="var(--accent)" size={20} opacity={0.5} />
+                                                        </div>
+                                                    )}
+                                                    <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1A0F0A' }}>{p.name.split(' ')[0]}</span>
+                                                </div>
                                             </div>
                                         ))}
                                     </div>
@@ -2532,7 +2682,33 @@ export default function Dashboard() {
 
                                     <div className={styles.modalActions} style={{ marginTop: '30px' }}>
                                         <button className={styles.btnCancel} onClick={() => setIsCartModalOpen(false)}>{t('continueShopping')}</button>
-                                        <button className={styles.btnSaveLux} onClick={() => swalLux('info', 'Paiement', 'Redirection vers la passerelle de paiement...')}>
+                                        <button className={styles.btnSaveLux} onClick={async () => {
+                                            if (cart.length === 0 && (!waitingData?.myReservations || waitingData.myReservations.filter((r: any) => r.status === 'pending').length === 0)) {
+                                                return swalLux('info', t('cartEmpty'));
+                                            }
+                                            
+                                            swalLux('info', 'Paiement', t('paymentProcessing'), { showConfirmButton: false, allowOutsideClick: false });
+                                            
+                                            try {
+                                                // Process Products
+                                                for (const prod of cart) {
+                                                    await purchaseProduct({ variables: { userId: user?.id, productId: prod.id } });
+                                                }
+                                                
+                                                // Process Pending Services
+                                                const pendingRes = waitingData?.myReservations?.filter((r: any) => r.status === 'pending') || [];
+                                                for (const res of pendingRes) {
+                                                    await updateReservationStatus({ variables: { id: res.id, status: 'confirmed' } });
+                                                }
+                                                
+                                                setCart([]);
+                                                setIsCartModalOpen(false);
+                                                swalLux('success', t('success'), t('paymentSuccess'));
+                                            } catch (err) {
+                                                console.error(err);
+                                                swalLux('error', t('error'), t('paymentError'));
+                                            }
+                                        }}>
                                             {t('pay')} <ArrowUpRight size={16} />
                                         </button>
                                     </div>
@@ -2636,9 +2812,9 @@ export default function Dashboard() {
                                     <div className={styles.headerLine} />
                                 </div>
 
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '60px' }}>
+                                <div style={{ maxWidth: '800px', margin: '0 auto' }}>
                                     <div>
-                                        <h3>{t('evaluateSpecialist')}</h3>
+                                        <h3 style={{ textAlign: 'center', marginBottom: '30px' }}>{t('evaluateSpecialist')}</h3>
                                         <div className={styles.feedbackGrid}>
                                             {feedbackData?.personnelEvaluations && feedbackData.personnelEvaluations.length > 0 ? (
                                                 feedbackData.personnelEvaluations.map((evalItem: any) => (
@@ -2658,31 +2834,6 @@ export default function Dashboard() {
                                                         <div className={styles.feedbackDate}>
                                                             <Clock size={12} style={{ marginRight: '5px' }} />
                                                             {new Date(parseInt(evalItem.createdAt)).toLocaleDateString(language, { day: 'numeric', month: 'long', year: 'numeric' })}
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <div className={styles.emptyState}>{t('noPending')}</div>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <h3>{t('liveLounge')}</h3>
-                                        <div className={styles.feedbackGrid}>
-                                            {feedbackData?.waitingComments && feedbackData.waitingComments.length > 0 ? (
-                                                feedbackData.waitingComments.map((comment: any) => (
-                                                    <div key={comment.id} className={styles.feedbackCard}>
-                                                        <div className={styles.feedbackHeader}>
-                                                            <div>
-                                                                <div className={styles.feedbackUser}>{comment.user.name}</div>
-                                                                <div className={styles.feedbackSub}>{comment.user.email}</div>
-                                                            </div>
-                                                        </div>
-                                                        <p className={styles.feedbackText}>{comment.comment}</p>
-                                                        <div className={styles.feedbackDate}>
-                                                            <Clock size={12} style={{ marginRight: '5px' }} />
-                                                            {new Date(parseInt(comment.createdAt)).toLocaleDateString(language, { day: 'numeric', month: 'long', year: 'numeric' })}
                                                         </div>
                                                     </div>
                                                 ))
@@ -2834,7 +2985,15 @@ export default function Dashboard() {
                                         </div>
                                         {prestataires.map((staff: any) => (
                                             <div key={staff.id} className={styles.tableRow} style={{ gridTemplateColumns: '0.5fr 2fr 2fr 1fr' }}>
-                                                <img src={staff.image} style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover' }} />
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                    {staff.image ? (
+                                                        <img src={staff.image} style={{ width: '40px', height: '40px', borderRadius: '10px', objectFit: 'cover' }} />
+                                                    ) : (
+                                                        <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                            <UserCheck color="var(--accent)" size={18} opacity={0.5} />
+                                                        </div>
+                                                    )}
+                                                </div>
                                                 <div className={styles.tableName}>
                                                     <span>{staff.name}</span>
                                                 </div>
@@ -3215,7 +3374,31 @@ export default function Dashboard() {
                                             />
                                         </div>
                                     </div>
-                                    <div className={styles.modalActions} style={{ marginTop: '40px' }}>
+                                        <div className={styles.inputGroup} style={{ marginTop: '10px' }}>
+                                            <button
+                                                type="button"
+                                                onClick={() => setEditingClient({ ...editingClient, is_blocked: !editingClient.is_blocked })}
+                                                style={{
+                                                    padding: '12px 20px',
+                                                    borderRadius: '12px',
+                                                    background: editingClient.is_blocked ? 'rgba(46, 204, 113, 0.1)' : 'rgba(231, 76, 60, 0.1)',
+                                                    border: `1.5px solid ${editingClient.is_blocked ? '#2ecc71' : '#e74c3c'}`,
+                                                    color: editingClient.is_blocked ? '#27ae60' : '#c0392b',
+                                                    fontWeight: 700,
+                                                    fontSize: '0.9rem',
+                                                    cursor: 'pointer',
+                                                    width: '100%',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    gap: '10px',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
+                                                {editingClient.is_blocked ? 'Débloquer cet utilisateur' : 'Bloquer cet utilisateur'}
+                                            </button>
+                                        </div>
+                                    <div className={styles.modalActions} style={{ marginTop: '30px' }}>
                                         <button className={styles.btnCancel} onClick={() => setIsEditClientModalOpen(false)}>{t('cancel')}</button>
                                         <button className={styles.btnSaveLux} onClick={async () => {
                                             try {
@@ -3225,7 +3408,8 @@ export default function Dashboard() {
                                                     email: editingClient.email,
                                                     role: editingClient.role,
                                                     tier: editingClient.tier,
-                                                    image: editingClient.image
+                                                    image: editingClient.image,
+                                                    is_blocked: editingClient.is_blocked
                                                 };
                                                 if (editingClient.password) {
                                                     vars.password = editingClient.password;
@@ -3573,6 +3757,33 @@ export default function Dashboard() {
                                             />
                                         </div>
                                         <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
+                                            <label>Couleur Agenda (Google Calendar)</label>
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '10px' }}>
+                                                {GOOGLE_CALENDAR_COLORS.map(c => (
+                                                    <button
+                                                        key={c.id}
+                                                        type="button"
+                                                        onClick={() => setNewSpecialist({...newSpecialist, calendar_color_id: c.id})}
+                                                        style={{
+                                                            width: '28px',
+                                                            height: '28px',
+                                                            borderRadius: '50%',
+                                                            background: c.hex,
+                                                            border: newSpecialist.calendar_color_id === c.id ? '2px solid #1A0F0A' : '1px solid rgba(0,0,0,0.1)',
+                                                            cursor: 'pointer',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            padding: 0
+                                                        }}
+                                                        title={c.name}
+                                                    >
+                                                        {newSpecialist.calendar_color_id === c.id && <Check size={14} color="white" />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
                                             <label>Historique & Biographie</label>
                                             <textarea
                                                 className={`${styles.luxuryInput} ${styles.textArea}`}
@@ -3605,6 +3816,7 @@ export default function Dashboard() {
                                                     hosp_expertise: newSpecialist.hosp_expertise,
                                                     prec_expertise: newSpecialist.prec_expertise,
                                                     award_badge: newSpecialist.award_badge,
+                                                    calendar_color_id: newSpecialist.calendar_color_id,
                                                     historique: newSpecialist.historique
                                                 }
                                             });
@@ -3613,7 +3825,8 @@ export default function Dashboard() {
                                             setNewSpecialist({ 
                                                 name: '', role: '', specialty: '', image: '', rating: 5.0,
                                                 satisfied_clients: '1.2k', tech_expertise: 95, hosp_expertise: 95, prec_expertise: 95, award_badge: 'Meilleur Spécialiste',
-                                                historique: ''
+                                                historique: '',
+                                                calendar_color_id: '1'
                                             });
                                         } catch (e) {
                                             console.error(e);
@@ -4311,12 +4524,96 @@ export default function Dashboard() {
                                     </div>
 
                                     <div className={styles.inputGroup} style={{ marginTop: '20px' }}>
-                                        <label>URL de l'image (Base64 ou lien)</label>
-                                        <input 
-                                            type="text" 
-                                            className={styles.luxuryInput} 
-                                            value={selectedSpecialistForHistorique.image || ''} 
-                                            onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, image: e.target.value})}
+                                        <label>Couleur Agenda (Google Calendar)</label>
+                                        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px' }}>
+                                            {GOOGLE_CALENDAR_COLORS.map(c => (
+                                                <button
+                                                    key={c.id}
+                                                    type="button"
+                                                    onClick={() => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, calendar_color_id: c.id})}
+                                                    style={{
+                                                        width: '32px',
+                                                        height: '32px',
+                                                        borderRadius: '50%',
+                                                        background: c.hex,
+                                                        border: selectedSpecialistForHistorique.calendar_color_id === c.id ? '2px solid #1A0F0A' : '1px solid rgba(0,0,0,0.1)',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        padding: 0,
+                                                        transition: 'transform 0.2s'
+                                                    }}
+                                                    title={c.name}
+                                                >
+                                                    {selectedSpecialistForHistorique.calendar_color_id === c.id && <Check size={16} color="white" />}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div className={styles.inputGroup} style={{ marginTop: '20px' }}>
+                                        <label>Image du Spécialiste</label>
+                                        <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '10px' }}>
+                                            <div 
+                                                className={styles.statIconLux} 
+                                                style={{ 
+                                                    width: '100px', 
+                                                    height: '100px', 
+                                                    position: 'relative', 
+                                                    overflow: 'hidden', 
+                                                    borderRadius: '20px',
+                                                    border: '2px dashed var(--accent)',
+                                                    background: 'rgba(223, 185, 109, 0.05)',
+                                                    flexShrink: 0
+                                                }}
+                                            >
+                                                {selectedSpecialistForHistorique.image ? (
+                                                    <img src={selectedSpecialistForHistorique.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                ) : (
+                                                    <Camera color="var(--accent)" size={32} opacity={0.3} />
+                                                )}
+                                                {isUploading && (
+                                                    <div style={{ position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                        <Loader2 className="animate-spin" size={24} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            
+                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                <button 
+                                                    type="button"
+                                                    className="btn-lux" 
+                                                    style={{ padding: '10px 20px', fontSize: '0.85rem' }}
+                                                    onClick={() => document.getElementById('edit-specialist-upload')?.click()}
+                                                >
+                                                    <Upload size={14} style={{ marginRight: '8px' }} /> {selectedSpecialistForHistorique.image ? 'Changer l\'image' : 'Télécharger'}
+                                                </button>
+                                                
+                                                {selectedSpecialistForHistorique.image && (
+                                                    <button 
+                                                        type="button"
+                                                        className="btn-lux" 
+                                                        style={{ 
+                                                            padding: '10px 20px', 
+                                                            fontSize: '0.85rem', 
+                                                            background: 'rgba(255, 68, 68, 0.1)', 
+                                                            border: '1px solid #ff4444', 
+                                                            color: '#ff4444' 
+                                                        }}
+                                                        onClick={() => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, image: ''})}
+                                                    >
+                                                        <Trash2 size={14} style={{ marginRight: '8px' }} /> Supprimer
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <input
+                                            id="edit-specialist-upload"
+                                            type="file"
+                                            accept="image/*"
+                                            style={{ display: 'none' }}
+                                            onChange={(e) => handleFileUpload(e, 'editSpecialist')}
                                         />
                                     </div>
 
@@ -4347,7 +4644,8 @@ export default function Dashboard() {
                                                         tech_expertise: selectedSpecialistForHistorique.tech_expertise,
                                                         hosp_expertise: selectedSpecialistForHistorique.hosp_expertise,
                                                         prec_expertise: selectedSpecialistForHistorique.prec_expertise,
-                                                        award_badge: selectedSpecialistForHistorique.award_badge
+                                                        award_badge: selectedSpecialistForHistorique.award_badge,
+                                                        calendar_color_id: selectedSpecialistForHistorique.calendar_color_id
                                                     }
                                                 });
                                                 Swal.fire({ title: t('success'), text: 'Profil mis à jour !', icon: 'success', confirmButtonColor: '#DFB96D' });
@@ -4358,6 +4656,328 @@ export default function Dashboard() {
                                             }
                                         }}>{t('save')}</button>
                                     </div>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                    {/* Add Reservation Modal */}
+                    {isAddReservationModalOpen && (
+                        <div className={styles.modalOverlay} onClick={() => { setIsAddReservationModalOpen(false); closeAllManualSelects(); }}>
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                className={styles.modal}
+                                style={{ maxWidth: '600px' }}
+                                onClick={(e) => { e.stopPropagation(); closeAllManualSelects(); }}
+                            >
+                                <div className={styles.modalHeader}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <div className={styles.modalIconBox} style={{ background: 'rgba(223, 185, 109, 0.1)' }}>
+                                            <Plus size={24} color="#DFB96D" />
+                                        </div>
+                                        <div>
+                                            <h3 style={{ margin: 0, fontSize: '1.5rem', fontFamily: "'Playfair Display', serif" }}>Nouvelle Réservation</h3>
+                                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#73685F' }}>Créer une réservation manuellement</p>
+                                        </div>
+                                    </div>
+                                    <button className={styles.closeBtn} onClick={() => setIsAddReservationModalOpen(false)}>
+                                        <X size={24} />
+                                    </button>
+                                </div>
+
+                                <div className={styles.modalBody} style={{ paddingBottom: '8px' }}>
+                                    <div className={styles.inputGrid}>
+                                        {/* CUSTOM CLIENT SELECT */}
+                                        <div className={styles.inputGroup} style={{ position: 'relative' }}>
+                                            <label>Client</label>
+                                            <div
+                                                className={styles.luxuryInput}
+                                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                                                onClick={(e) => { e.stopPropagation(); closeAllManualSelects(); setIsManualClientSearchOpen(!isManualClientSearchOpen); }}
+                                            >
+                                                <span style={{ color: manualReservation.userId ? '#1A0F0A' : '#9a8878' }}>
+                                                    {manualReservation.userId
+                                                        ? (data?.clients?.find((c: any) => c.id === manualReservation.userId)?.name || 'Client')
+                                                        : 'Sélectionner un client'}
+                                                </span>
+                                                <motion.div animate={{ rotate: isManualClientSearchOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                    <ChevronDown size={16} color="#DFB96D" />
+                                                </motion.div>
+                                            </div>
+                                            <AnimatePresence>
+                                                {isManualClientSearchOpen && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        transition={{ duration: 0.15 }}
+                                                        className={styles.reservationDropdownMenu}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <div className={styles.reservationDropdownSearch}>
+                                                            <input
+                                                                autoFocus
+                                                                type="text"
+                                                                placeholder="Rechercher un client..."
+                                                                value={manualClientSearch}
+                                                                onChange={(e) => setManualClientSearch(e.target.value)}
+                                                                onClick={(e) => e.stopPropagation()}
+                                                            />
+                                                        </div>
+                                                        <div className={styles.reservationDropdownList}>
+                                                            {(data?.clients || [])
+                                                                .filter((c: any) => c.name.toLowerCase().includes(manualClientSearch.toLowerCase()) || c.email.toLowerCase().includes(manualClientSearch.toLowerCase()))
+                                                                .map((c: any) => (
+                                                                    <div
+                                                                        key={c.id}
+                                                                        className={styles.reservationDropdownItem}
+                                                                        onClick={() => {
+                                                                            setManualReservation({ ...manualReservation, userId: c.id });
+                                                                            setIsManualClientSearchOpen(false);
+                                                                            setManualClientSearch('');
+                                                                        }}
+                                                                    >
+                                                                        <span className={styles.itemName}>{c.name}</span>
+                                                                        <span className={styles.itemSub}>{c.email}</span>
+                                                                    </div>
+                                                                ))
+                                                            }
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+
+                                        {/* CUSTOM SERVICE SELECT */}
+                                        <div className={styles.inputGroup} style={{ position: 'relative' }}>
+                                            <label>Service</label>
+                                            <div
+                                                className={styles.luxuryInput}
+                                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                                                onClick={(e) => { e.stopPropagation(); closeAllManualSelects(); setIsManualServiceSearchOpen(!isManualServiceSearchOpen); }}
+                                            >
+                                                <span style={{ color: manualReservation.serviceId ? '#1A0F0A' : '#9a8878' }}>
+                                                    {manualReservation.serviceId
+                                                        ? (data?.services?.find((s: any) => s.id === manualReservation.serviceId)?.name || 'Service')
+                                                        : 'Sélectionner un service'}
+                                                </span>
+                                                <motion.div animate={{ rotate: isManualServiceSearchOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                    <ChevronDown size={16} color="#DFB96D" />
+                                                </motion.div>
+                                            </div>
+                                            <AnimatePresence>
+                                                {isManualServiceSearchOpen && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        transition={{ duration: 0.15 }}
+                                                        className={styles.reservationDropdownMenu}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <div className={styles.reservationDropdownList}>
+                                                            {(data?.services || []).map((s: any) => (
+                                                                <div
+                                                                    key={s.id}
+                                                                    className={styles.reservationDropdownItem}
+                                                                    onClick={() => {
+                                                                        setManualReservation({ ...manualReservation, serviceId: s.id });
+                                                                        setIsManualServiceSearchOpen(false);
+                                                                    }}
+                                                                >
+                                                                    <span className={styles.itemName}>{s.name}</span>
+                                                                    <span className={styles.itemPrice}>{s.price} DT</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+
+                                        {/* CUSTOM SPECIALIST SELECT */}
+                                        <div className={styles.inputGroup} style={{ position: 'relative' }}>
+                                            <label>Spécialiste</label>
+                                            <div
+                                                className={styles.luxuryInput}
+                                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                                                onClick={(e) => { e.stopPropagation(); closeAllManualSelects(); setIsManualSpecialistSearchOpen(!isManualSpecialistSearchOpen); }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    {manualReservation.prestataireId && (() => {
+                                                        const p = data?.prestataires?.find((p: any) => p.id === manualReservation.prestataireId);
+                                                        return p?.calendar_color_id ? <div className={styles.itemDot} style={{ background: getColorHex(p.calendar_color_id) }} /> : null;
+                                                    })()}
+                                                    <span style={{ color: manualReservation.prestataireId ? '#1A0F0A' : '#9a8878' }}>
+                                                        {manualReservation.prestataireId
+                                                            ? (data?.prestataires?.find((p: any) => p.id === manualReservation.prestataireId)?.name || 'Spécialiste')
+                                                            : 'Sélectionner un spécialiste'}
+                                                    </span>
+                                                </div>
+                                                <motion.div animate={{ rotate: isManualSpecialistSearchOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                    <ChevronDown size={16} color="#DFB96D" />
+                                                </motion.div>
+                                            </div>
+                                            <AnimatePresence>
+                                                {isManualSpecialistSearchOpen && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        transition={{ duration: 0.15 }}
+                                                        className={styles.reservationDropdownMenu}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        <div className={styles.reservationDropdownList}>
+                                                            {(data?.prestataires || []).map((p: any) => (
+                                                                <div
+                                                                    key={p.id}
+                                                                    className={styles.reservationDropdownItem}
+                                                                    onClick={() => {
+                                                                        setManualReservation({ ...manualReservation, prestataireId: p.id });
+                                                                        setIsManualSpecialistSearchOpen(false);
+                                                                    }}
+                                                                >
+                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                        {p.calendar_color_id && (
+                                                                            <div className={styles.itemDot} style={{ background: getColorHex(p.calendar_color_id) }} />
+                                                                        )}
+                                                                        <span className={styles.itemName}>{p.name}</span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+
+                                        {/* DATE & TIME — inline panel, no floating dropdown */}
+                                        <div className={styles.inputGroup} style={{ position: 'relative' }}>
+                                            <label>Date et Heure</label>
+                                            <div
+                                                className={styles.luxuryInput}
+                                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                                                onClick={(e) => { e.stopPropagation(); closeAllManualSelects(); setIsManualDatePickerOpen(!isManualDatePickerOpen); }}
+                                            >
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                    <Calendar size={16} color="#DFB96D" />
+                                                    <span style={{ color: '#1A0F0A' }}>{selectedManualDate.toLocaleDateString(language, { day: '2-digit', month: 'long', year: 'numeric' })} à {selectedManualTime}</span>
+                                                </div>
+                                                <motion.div animate={{ rotate: isManualDatePickerOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                    <ChevronDown size={16} color="#DFB96D" />
+                                                </motion.div>
+                                            </div>
+                                            <AnimatePresence>
+                                                {isManualDatePickerOpen && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                                                        transition={{ duration: 0.18 }}
+                                                        className={styles.reservationDatePanel}
+                                                        onClick={(e) => e.stopPropagation()}
+                                                    >
+                                                        {/* Calendar header */}
+                                                        <div className={styles.reservationCalHeader}>
+                                                            <button
+                                                                className={styles.reservationCalNavBtn}
+                                                                onClick={() => { const d = new Date(selectedManualDate); d.setMonth(d.getMonth() - 1); setSelectedManualDate(d); }}
+                                                            >
+                                                                <ChevronLeft size={16} />
+                                                            </button>
+                                                            <strong>
+                                                                {selectedManualDate.toLocaleDateString(language, { month: 'long', year: 'numeric' })}
+                                                            </strong>
+                                                            <button
+                                                                className={styles.reservationCalNavBtn}
+                                                                onClick={() => { const d = new Date(selectedManualDate); d.setMonth(d.getMonth() + 1); setSelectedManualDate(d); }}
+                                                            >
+                                                                <ChevronRight size={16} />
+                                                            </button>
+                                                        </div>
+
+                                                        {/* Day grid */}
+                                                        <div className={styles.reservationCalGrid}>
+                                                            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, i) => (
+                                                                <div key={i} className={styles.reservationCalDayLabel}>{d}</div>
+                                                            ))}
+                                                            {(() => {
+                                                                const year = selectedManualDate.getFullYear();
+                                                                const month = selectedManualDate.getMonth();
+                                                                const firstDay = new Date(year, month, 1).getDay();
+                                                                const daysInMonth = new Date(year, month + 1, 0).getDate();
+                                                                const days = [];
+                                                                for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} />);
+                                                                for (let d = 1; d <= daysInMonth; d++) {
+                                                                    const isSelected = selectedManualDate.getDate() === d;
+                                                                    days.push(
+                                                                        <div
+                                                                            key={d}
+                                                                            className={`${styles.reservationCalDay} ${isSelected ? styles.reservationCalDaySelected : ''}`}
+                                                                            onClick={() => { const nd = new Date(selectedManualDate); nd.setDate(d); setSelectedManualDate(nd); }}
+                                                                        >
+                                                                            {d}
+                                                                        </div>
+                                                                    );
+                                                                }
+                                                                return days;
+                                                            })()}
+                                                        </div>
+
+                                                        {/* Time slots */}
+                                                        <div className={styles.reservationTimeGrid}>
+                                                            {['09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'].map(t => (
+                                                                <div
+                                                                    key={t}
+                                                                    className={`${styles.reservationTimeSlot} ${selectedManualTime === t ? styles.reservationTimeSlotSelected : ''}`}
+                                                                    onClick={() => { setSelectedManualTime(t); setIsManualDatePickerOpen(false); }}
+                                                                >
+                                                                    {t}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                    </div>
+
+                                </div>
+
+                                {/* Actions footer — outside modalBody so it's always visible */}
+                                <div className={styles.modalActions}>
+                                    <button className={styles.btnCancel} onClick={() => setIsAddReservationModalOpen(false)}>{t('cancel')}</button>
+                                    <button
+                                        className={styles.btnSaveLux}
+                                        onClick={async () => {
+                                            if (!manualReservation.userId || !manualReservation.serviceId || !manualReservation.prestataireId) {
+                                                Swal.fire({ title: 'Attention', text: 'Veuillez remplir tous les champs.', icon: 'warning', confirmButtonColor: '#DFB96D' });
+                                                return;
+                                            }
+                                            const finalDate = new Date(selectedManualDate);
+                                            const [hours, minutes] = selectedManualTime.split(':');
+                                            finalDate.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+                                            try {
+                                                await createReservation({
+                                                    variables: {
+                                                        userId: manualReservation.userId,
+                                                        serviceId: manualReservation.serviceId,
+                                                        prestataireId: manualReservation.prestataireId,
+                                                        date: finalDate.toISOString()
+                                                    }
+                                                });
+                                                Swal.fire({ title: 'Succès', text: 'Réservation créée avec succès !', icon: 'success', confirmButtonColor: '#DFB96D' });
+                                                setIsAddReservationModalOpen(false);
+                                                setManualReservation({ userId: '', serviceId: '', prestataireId: '', date: '' });
+                                            } catch (e) {
+                                                console.error(e);
+                                                Swal.fire({ title: 'Erreur', text: 'Échec de la création', icon: 'error' });
+                                            }
+                                        }}
+                                    >
+                                        Confirmer la Réservation
+                                    </button>
                                 </div>
                             </motion.div>
                         </div>

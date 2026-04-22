@@ -24,6 +24,7 @@ export const GET_DASHBOARD_DATA = gql`
       hosp_expertise
       prec_expertise
       award_badge
+      calendar_color_id
     }
     amenities {
       name
@@ -68,6 +69,7 @@ export const GET_DASHBOARD_DATA = gql`
       allergies
       last_visit_notes
       image
+      is_blocked
     }
     allReservations: myReservations {
       id
@@ -77,6 +79,7 @@ export const GET_DASHBOARD_DATA = gql`
         id
         name
         price
+        duration
       }
       user {
         id
@@ -233,6 +236,17 @@ export const GET_SPECIALIST = gql`
       hosp_expertise
       prec_expertise
       award_badge
+      calendar_color_id
+      evaluations {
+        id
+        rating
+        comment
+        createdAt
+        user {
+          name
+          image
+        }
+      }
     }
   }
 `;

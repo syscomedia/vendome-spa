@@ -177,7 +177,11 @@ export const TRANSLATIONS = {
         addClient: "Ajouter Client",
         add: "Ajouter",
         phone: "Téléphone",
-        birthday: "Date de naissance"
+        birthday: "Date de naissance",
+        cartEmpty: "Votre panier est vide",
+        paymentProcessing: "Traitement de votre commande...",
+        paymentSuccess: "Paiement effectué avec succès ! Vos points de fidélité ont été mis à jour.",
+        paymentError: "Une erreur est survenue lors du paiement."
     },
     ar: {
         welcome: "مرحباً بكم في فاندوم",
@@ -330,7 +334,11 @@ export const TRANSLATIONS = {
         goldMember: "عضو ذهبي",
         normalMember: "عادي",
         success: "نجاح",
-        error: "خطأ"
+        error: "خطأ",
+        cartEmpty: "سلة التسوق فارغة",
+        paymentProcessing: "جاري معالجة طلبك...",
+        paymentSuccess: "تم الدفع بنجاح! تم تحديث نقاط الولاء الخاصة بك.",
+        paymentError: "حدث خطأ أثناء عملية الدفع."
     },
     es: {
         welcome: "Bienvenido a Vendôme",
@@ -480,7 +488,11 @@ export const TRANSLATIONS = {
         productAdded: "¡Producto añadido!",
         productUpdated: "¡Producto actualizado!",
         success: "Éxito",
-        error: "Error"
+        error: "Error",
+        cartEmpty: "Tu carrito está vacío",
+        paymentProcessing: "Procesando su pedido...",
+        paymentSuccess: "¡Pago realizado con éxito! Sus puntos de fidelidad han sido actualizados.",
+        paymentError: "Ocurrió un error durante el pago."
     },
     ru: {
         welcome: "Добро пожаловать в Vendôme",
@@ -630,7 +642,11 @@ export const TRANSLATIONS = {
         productAdded: "Продукт добавлен!",
         productUpdated: "Продукт обновлен!",
         success: "Успешно",
-        error: "Ошибка"
+        error: "Ошибка",
+        cartEmpty: "Ваша корзина пуста",
+        paymentProcessing: "Обработка вашего заказа...",
+        paymentSuccess: "Оплата прошла успешно! Ваши бонусные баллы обновлены.",
+        paymentError: "Произошла ошибка при оплате."
     },
     zh: {
         welcome: "欢迎来到 Vendôme",
@@ -780,9 +796,24 @@ export const TRANSLATIONS = {
         productAdded: "产品已添加！",
         productUpdated: "产品已更新！",
         success: "成功",
-        error: "错误"
+        error: "错误",
+        cartEmpty: "您的购物车是空的",
+        paymentProcessing: "正在处理您的订单...",
+        paymentSuccess: "支付成功！您的忠诚度积分已更新。",
+        paymentError: "支付过程中发生错误。"
     }
 };
+
+export interface Evaluation {
+    id: string;
+    rating: number;
+    comment: string;
+    createdAt: string;
+    user: {
+        name: string;
+        image?: string;
+    };
+}
 
 export interface Prestataire {
     id: string;
@@ -792,11 +823,13 @@ export interface Prestataire {
     rating: number;
     specialty: string;
     historique?: string;
+    satisfied_clients?: string;
     tech_expertise?: number;
     hosp_expertise?: number;
     prec_expertise?: number;
     award_badge?: string;
-    satisfied_clients?: string;
+    calendar_color_id?: string;
+    evaluations?: Evaluation[];
 }
 
 export interface Service {

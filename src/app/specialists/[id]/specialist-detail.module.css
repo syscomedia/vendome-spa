@@ -982,3 +982,59 @@
     background: #D4AF37;
     transform: scale(1.1);
 }
+
+/* --- DYNAMIC TESTIMONIALS --- */
+.tUser {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.tUserImg {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: rgba(226, 180, 92, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid rgba(226, 180, 92, 0.3);
+}
+
+.tUserImg img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.tUserPlaceholder {
+    font-weight: 900;
+    color: #E2B45C;
+    font-size: 1.2rem;
+}
+
+.tComment {
+    font-size: 1.2rem;
+    line-height: 1.6;
+    margin-bottom: 20px;
+    font-style: italic;
+    opacity: 0.9;
+}
+
+.tDate {
+    display: block;
+    font-size: 0.8rem;
+    opacity: 0.4;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.testimonialCard {
+    margin-bottom: 30px;
+    transition: transform 0.3s ease;
+}
+
+.testimonialCard:hover {
+    transform: translateY(-5px);
+}

@@ -29,7 +29,7 @@ export const resolvers = {
         },
         prestataires: async () => {
             try {
-                const res = await query('SELECT id, name, role, image, rating, specialty, historique FROM specialistes');
+                const res = await query('SELECT id, name, role, image, rating, specialty, historique, calendar_color_id FROM specialistes');
                 return res.rows;
             } catch (e) {
                 console.error('Error fetching specialists:', e);
@@ -38,7 +38,7 @@ export const resolvers = {
         },
         prestataire: async (_: any, { id }: any) => {
             try {
-                const res = await query('SELECT id, name, role, image, rating, specialty, historique FROM specialistes WHERE id = $1', [id]);
+                const res = await query('SELECT id, name, role, image, rating, specialty, historique, calendar_color_id FROM specialistes WHERE id = $1', [id]);
                 return res.rows[0];
             } catch (e) {
                 console.error('Error fetching specialist:', e);
@@ -101,7 +101,7 @@ export const resolvers = {
         },
         clients: async () => {
             try {
-                const res = await query("SELECT id, email, name, role, points, tier, password, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image FROM users ORDER BY name ASC");
+                const res = await query("SELECT id, email, name, role, points, tier, password, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image, is_blocked FROM users ORDER BY name ASC");
                 return res.rows;
             } catch (e) {
                 console.error('Error fetching clients:', e);
@@ -124,7 +124,7 @@ export const resolvers = {
                         r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode",
                         json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration, 'description', s.description) as service,
-                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
+                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty, 'calendar_color_id', p.calendar_color_id) as prestataire
                     FROM reservations r
                     LEFT JOIN users u ON r.user_id = u.id
                     LEFT JOIN services s ON r.service_id = s.id
@@ -176,7 +176,7 @@ export const resolvers = {
                     SELECT 
                         e.id, e.rating, e.comment, e.created_at as "createdAt",
                         json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
-                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
+                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty, 'calendar_color_id', p.calendar_color_id) as prestataire
                     FROM personnel_evaluations e
                     JOIN users u ON e.user_id = u.id
                     JOIN specialistes p ON e.prestataire_id = p.id
@@ -209,7 +209,14 @@ export const resolvers = {
         },
         externalEvents: async () => {
             try {
-                const res = await query('SELECT id, google_event_id, title, start_date as "startDate", end_date as "endDate", reservation_id as "reservationId" FROM external_events ORDER BY start_date ASC');
+                const res = await query(`
+                    SELECT e.id, e.google_event_id, e.title, e.start_date as "startDate", e.end_date as "endDate", e.reservation_id as "reservationId" 
+                    FROM external_events e
+                    WHERE e.google_event_id NOT IN (
+                        SELECT google_event_id FROM reservations WHERE google_event_id IS NOT NULL
+                    )
+                    ORDER BY e.start_date ASC
+                `);
                 return res.rows.map(row => ({
                     ...row,
                     startDate: row.startDate.toISOString(),
@@ -231,6 +238,20 @@ export const resolvers = {
             return res.rows[0];
         }
     },
+    Prestataire: {
+        evaluations: async (parent: any) => {
+            const res = await query(`
+                SELECT 
+                    e.id, e.rating, e.comment, e.created_at as "createdAt",
+                    json_build_object('id', u.id, 'name', u.name, 'email', u.email, 'image', u.image) as user
+                FROM personnel_evaluations e
+                JOIN users u ON e.user_id = u.id
+                WHERE e.prestataire_id = $1
+                ORDER BY e.created_at DESC
+            `, [parent.id]);
+            return res.rows;
+        }
+    },
     Mutation: {
         login: async (_: any, { email, password }: any) => {
             try {
@@ -238,6 +259,9 @@ export const resolvers = {
                 const user = res.rows[0];
                 if (!user) {
                     return { error: 'User not found' };
+                }
+                if (user.is_blocked) {
+                    return { error: 'il faut consulter administrateur' };
                 }
                 const bcrypt = require('bcryptjs');
                 let valid = false;
@@ -285,6 +309,9 @@ export const resolvers = {
                 let user = res.rows[0];
 
                 if (user) {
+                    if (user.is_blocked) {
+                        return { error: 'il faut consulter administrateur' };
+                    }
                     return { user: { id: user.id, email: user.email, name: user.name, role: user.role } };
                 }
 
@@ -315,10 +342,10 @@ export const resolvers = {
                 // Fetching is safer.
                 const fullRes = await query(`
                     SELECT 
-                        r.id, r.date, r.status,
+                        r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode",
                         json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
-                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
+                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty, 'calendar_color_id', p.calendar_color_id) as prestataire
                     FROM reservations r
                     LEFT JOIN users u ON r.user_id = u.id
                     LEFT JOIN services s ON r.service_id = s.id
@@ -374,10 +401,10 @@ export const resolvers = {
             );
             return res.rows[0];
         },
-        addPrestataire: async (_: any, { name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge }: any) => {
+        addPrestataire: async (_: any, { name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id }: any) => {
             const res = await query(
-                'INSERT INTO specialistes (name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *',
-                [name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge]
+                'INSERT INTO specialistes (name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
+                [name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id]
             );
             return res.rows[0];
         },
@@ -419,11 +446,11 @@ export const resolvers = {
                 const values: any[] = [];
                 const updates: string[] = [];
 
-                if (name) {
+                if (name !== undefined) {
                     updates.push(`name = $${values.length + 1}`);
                     values.push(name);
                 }
-                if (description) {
+                if (description !== undefined) {
                     updates.push(`description = $${values.length + 1}`);
                     values.push(description);
                 }
@@ -431,11 +458,11 @@ export const resolvers = {
                     updates.push(`price = $${values.length + 1}`);
                     values.push(price);
                 }
-                if (image) {
+                if (image !== undefined) {
                     updates.push(`image = $${values.length + 1}`);
                     values.push(image);
                 }
-                if (duration) {
+                if (duration !== undefined) {
                     updates.push(`duration = $${values.length + 1}`);
                     values.push(duration);
                 }
@@ -466,7 +493,7 @@ export const resolvers = {
             await query('DELETE FROM users WHERE id = $1', [userId]);
             return true;
         },
-        updateUser: async (_: any, { userId, email, name, role, password, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image }: any) => {
+        updateUser: async (_: any, { userId, email, name, role, password, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image, is_blocked }: any) => {
             try {
                 let queryText = 'UPDATE users SET ';
                 const values: any[] = [];
@@ -548,17 +575,21 @@ export const resolvers = {
                     updates.push(`image = $${values.length + 1}`);
                     values.push(image);
                 }
+                if (is_blocked !== undefined) {
+                    updates.push(`is_blocked = $${values.length + 1}`);
+                    values.push(is_blocked);
+                }
                 if (password) {
                     updates.push(`password = $${values.length + 1}`);
                     values.push(password); // Note: still plain text per previous requirements
                 }
 
                 if (updates.length === 0) {
-                    const res = await query('SELECT id, email, name, role, points, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image FROM users WHERE id = $1', [userId]);
+                    const res = await query('SELECT id, email, name, role, points, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image, is_blocked FROM users WHERE id = $1', [userId]);
                     return res.rows[0];
                 }
 
-                queryText += updates.join(', ') + ` WHERE id = $${values.length + 1} RETURNING id, email, name, role, points, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image`;
+                queryText += updates.join(', ') + ` WHERE id = $${values.length + 1} RETURNING id, email, name, role, points, tier, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image, is_blocked`;
                 values.push(userId);
 
                 const res = await query(queryText, values);
@@ -581,11 +612,11 @@ export const resolvers = {
                 const values: any[] = [];
                 const updates: string[] = [];
 
-                if (name) {
+                if (name !== undefined) {
                     updates.push(`name = $${values.length + 1}`);
                     values.push(name);
                 }
-                if (description) {
+                if (description !== undefined) {
                     updates.push(`description = $${values.length + 1}`);
                     values.push(description);
                 }
@@ -593,7 +624,7 @@ export const resolvers = {
                     updates.push(`price = $${values.length + 1}`);
                     values.push(price);
                 }
-                if (image) {
+                if (image !== undefined) {
                     updates.push(`image = $${values.length + 1}`);
                     values.push(image);
                 }
@@ -617,15 +648,15 @@ export const resolvers = {
             await query('DELETE FROM products WHERE id = $1', [id]);
             return true;
         },
-        updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge }: any) => {
+        updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id }: any) => {
             try {
                 let queryText = 'UPDATE specialistes SET ';
                 const values: any[] = [];
                 const updates: string[] = [];
 
-                if (name) { updates.push(`name = $${values.length + 1}`); values.push(name); }
-                if (role) { updates.push(`role = $${values.length + 1}`); values.push(role); }
-                if (image) { updates.push(`image = $${values.length + 1}`); values.push(image); }
+                if (name !== undefined) { updates.push(`name = $${values.length + 1}`); values.push(name); }
+                if (role !== undefined) { updates.push(`role = $${values.length + 1}`); values.push(role); }
+                if (image !== undefined) { updates.push(`image = $${values.length + 1}`); values.push(image); }
                 if (specialty) { updates.push(`specialty = $${values.length + 1}`); values.push(specialty); }
                 if (rating !== undefined) { updates.push(`rating = $${values.length + 1}`); values.push(rating); }
                 if (historique !== undefined) { updates.push(`historique = $${values.length + 1}`); values.push(historique); }
@@ -634,6 +665,7 @@ export const resolvers = {
                 if (hosp_expertise !== undefined) { updates.push(`hosp_expertise = $${values.length + 1}`); values.push(hosp_expertise); }
                 if (prec_expertise !== undefined) { updates.push(`prec_expertise = $${values.length + 1}`); values.push(prec_expertise); }
                 if (award_badge !== undefined) { updates.push(`award_badge = $${values.length + 1}`); values.push(award_badge); }
+                if (calendar_color_id !== undefined) { updates.push(`calendar_color_id = $${values.length + 1}`); values.push(calendar_color_id); }
 
                 if (updates.length === 0) {
                     const res = await query('SELECT * FROM specialistes WHERE id = $1', [id]);
@@ -671,8 +703,43 @@ export const resolvers = {
                 throw e;
             }
         },
+        purchaseProduct: async (_: any, { userId, productId }: any) => {
+            try {
+                // Fetch product price
+                const prodRes = await query('SELECT price FROM products WHERE id = $1', [productId]);
+                if (prodRes.rows.length === 0) return false;
+                const price = parseFloat(prodRes.rows[0].price);
+                
+                // Calculate points (10 DT = 1 point)
+                const pointsToAdd = Math.floor(price / 10);
+                
+                if (pointsToAdd > 0) {
+                    await query('UPDATE users SET points = points + $1 WHERE id = $2', [pointsToAdd, userId]);
+                    
+                    // Add to service_history (optional but good for tracking)
+                    // Wait, service_history table might need adjustment for products, but I'll skip for now if not requested.
+                }
+                
+                return true;
+            } catch (e) {
+                console.error('Error purchasing product:', e);
+                return false;
+            }
+        },
         updateReservationStatus: async (_: any, { id, status, paymentMode }: any, { session }: any) => {
             try {
+                // Fetch current status and service details before update
+                const currentRes = await query(`
+                    SELECT r.status, s.price, r.user_id 
+                    FROM reservations r 
+                    JOIN services s ON r.service_id = s.id 
+                    WHERE r.id = $1
+                `, [id]);
+                
+                const oldStatus = currentRes.rows[0]?.status;
+                const servicePrice = parseFloat(currentRes.rows[0]?.price || 0);
+                const userId = currentRes.rows[0]?.user_id;
+
                 let queryText = 'UPDATE reservations SET status = $1';
                 const values = [status, id];
                 if (paymentMode) {
@@ -682,13 +749,21 @@ export const resolvers = {
                 queryText += ' WHERE id = $2 RETURNING id, status, payment_mode as "paymentMode"';
                 
                 await query(queryText, values);
+
+                // Add points if status changed to 'confirmed' (consumed)
+                if (status === 'confirmed' && oldStatus !== 'confirmed' && userId) {
+                    const pointsToAdd = Math.floor(servicePrice / 10);
+                    if (pointsToAdd > 0) {
+                        await query('UPDATE users SET points = points + $1 WHERE id = $2', [pointsToAdd, userId]);
+                    }
+                }
                 
                 const fullRes = await query(`
                     SELECT 
                         r.id, r.date, r.status, r.payment_mode as "paymentMode", r.external_title as "externalTitle", r.google_event_id,
                         json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
-                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
+                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty, 'calendar_color_id', p.calendar_color_id) as prestataire
                     FROM reservations r
                     LEFT JOIN users u ON r.user_id = u.id
                     LEFT JOIN services s ON r.service_id = s.id
@@ -765,10 +840,10 @@ export const resolvers = {
                 await query('UPDATE reservations SET date = $1 WHERE id = $2', [date, id]);
                 const fullRes = await query(`
                     SELECT 
-                        r.id, r.date, r.status,
+                        r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode",
                         json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
-                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
+                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty, 'calendar_color_id', p.calendar_color_id) as prestataire
                     FROM reservations r
                     LEFT JOIN users u ON r.user_id = u.id
                     LEFT JOIN services s ON r.service_id = s.id
@@ -819,10 +894,10 @@ export const resolvers = {
                 // Return full reservation
                 const fullRes = await query(`
                     SELECT 
-                        r.id, r.date, r.status, r.external_title as "externalTitle",
+                        r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode",
                         json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
-                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty) as prestataire
+                        json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty, 'calendar_color_id', p.calendar_color_id) as prestataire
                     FROM reservations r
                     LEFT JOIN users u ON r.user_id = u.id
                     LEFT JOIN services s ON r.service_id = s.id
