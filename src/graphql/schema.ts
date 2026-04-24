@@ -103,9 +103,9 @@ export const typeDefs = gql`
   type Product {
     id: ID!
     name: String!
-    description: String!
+    description: String
     price: Float!
-    image: String!
+    image: String
   }
 
   type Drink {
@@ -209,7 +209,7 @@ export const typeDefs = gql`
     updateUser(userId: ID!, email: String, name: String, role: String, password: String, tier: String, hair_color_pref: String, favorite_coupe: String, nail_color_pref: String, music_pref: String, music_link: String, drink_pref: String, skin_type: String, birthday: String, phone: String, coffee_pref: String, employee_pref: String, favourite_service: String, allergies: String, last_visit_notes: String, image: String, is_blocked: Boolean): User!
     removeUser(userId: ID!): Boolean
     updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String, serviceId: ID): Prestataire!
-    addProduct(name: String!, description: String!, price: Float!, image: String!): Product!
+    addProduct(name: String!, description: String, price: Float!, image: String): Product!
     updateProduct(id: ID!, name: String, description: String, price: Float, image: String): Product!
     removeProduct(id: ID!): Boolean
     updateReservationStatus(id: ID!, status: String!, paymentMode: String): Reservation!

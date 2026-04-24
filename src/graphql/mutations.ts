@@ -217,7 +217,7 @@ export const UPDATE_SERVICE_MUTATION = gql`
 `;
 
 export const ADD_PRODUCT_MUTATION = gql`
-  mutation AddProduct($name: String!, $description: String!, $price: Float!, $image: String!) {
+  mutation AddProduct($name: String!, $description: String, $price: Float!, $image: String) {
     addProduct(name: $name, description: $description, price: $price, image: $image) {
       id
       name

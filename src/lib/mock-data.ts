@@ -195,6 +195,7 @@ export const TRANSLATIONS = {
         noSessionsToday: "Aucune séance prévue aujourd'hui",
         noAppointmentsDesc: "Vous n'avez pas de rendez-vous pour cette journée. Envie d'une pause bien-être ?",
         bookASession: "RÉSERVER UNE SÉANCE",
+        fillAllFields: "Veuillez remplir tous les champs obligatoires",
     },
     ar: {
         welcome: "مرحباً بكم في فاندوم",
@@ -365,6 +366,7 @@ export const TRANSLATIONS = {
         noSessionsToday: "لا توجد جلسات مجدولة اليوم",
         noAppointmentsDesc: "ليس لديك مواعيد لهذا اليوم. هل ترغب في استراحة استرخاء؟",
         bookASession: "حجز جلسة",
+        fillAllFields: "يرجى ملء جميع الحقول المطلوبة",
     },
     es: {
         welcome: "Bienvenido a Vendôme",
@@ -518,7 +520,8 @@ export const TRANSLATIONS = {
         cartEmpty: "Tu carrito está vacío",
         paymentProcessing: "Procesando su pedido...",
         paymentSuccess: "¡Pago realizado con éxito! Sus puntos de fidelidad han sido actualizados.",
-        paymentError: "Ocurrió un error durante el pago."
+        paymentError: "Ocurrió un error durante el pago.",
+        fillAllFields: "Por favor complete todos los campos obligatorios",
     },
     ru: {
         welcome: "Добро пожаловать в Vendôme",
@@ -672,7 +675,8 @@ export const TRANSLATIONS = {
         cartEmpty: "Ваша корзина пуста",
         paymentProcessing: "Обработка вашего заказа...",
         paymentSuccess: "Оплата прошла успешно! Ваши бонусные баллы обновлены.",
-        paymentError: "Произошла ошибка при оплате."
+        paymentError: "Произошла ошибка при оплате.",
+        fillAllFields: "Пожалуйста, заполните все обязательные поля",
     },
     zh: {
         welcome: "欢迎来到 Vendôme",
@@ -826,8 +830,9 @@ export const TRANSLATIONS = {
         cartEmpty: "您的购物车是空的",
         paymentProcessing: "正在处理您的订单...",
         paymentSuccess: "支付成功！您的忠诚度积分已更新。",
-        paymentError: "支付过程中发生错误。"
-    }
+        paymentError: "支付过程中发生错误。",
+        fillAllFields: "请填写所有必填字段",
+    },
 };
 
 export interface Evaluation {

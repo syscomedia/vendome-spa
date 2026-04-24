@@ -3109,7 +3109,13 @@ export default function Dashboard() {
                                             animate={{ opacity: 1 }}
                                         >
                                             <div className={styles.serviceImgWrapper}>
-                                                <img src={prod.image} alt={prod.name} />
+                                                {prod.image ? (
+                                                    <img src={prod.image} alt={prod.name} />
+                                                ) : (
+                                                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #FDFCFB 0%, #E2D1C3 100%)' }}>
+                                                        <Gift size={48} color="rgba(223, 185, 109, 0.5)" />
+                                                    </div>
+                                                )}
                                                 <div className={styles.servicePrice}>{prod.price} DT</div>
                                                 {/* Admin overlay removed as actions are now at the bottom */}
                                             </div>
@@ -5650,12 +5656,21 @@ export default function Dashboard() {
                                     <div className={styles.modalActions} style={{ marginTop: '30px' }}>
                                         <button className={styles.btnCancel} onClick={() => setIsAddProductModalOpen(false)}>{t('cancel')}</button>
                                         <button className={styles.btnSaveLux} onClick={async () => {
+                                             if (!newProduct.name || !newProduct.price) {
+                                                 swalLux('warning', t('fillAllFields') || 'Veuillez remplir tous les champs obligatoires');
+                                                 return;
+                                             }
+                                             const priceNum = parseFloat(newProduct.price);
+                                             if (isNaN(priceNum)) {
+                                                 swalLux('error', 'Prix invalide');
+                                                 return;
+                                             }
                                             try {
                                                 await addProduct({
                                                     variables: {
                                                         name: newProduct.name,
                                                         description: newProduct.description,
-                                                        price: parseFloat(newProduct.price),
+                                                        price: priceNum,
                                                         image: newProduct.image
                                                     }
                                                 });
@@ -5750,13 +5765,22 @@ export default function Dashboard() {
                                     <div className={styles.modalActions} style={{ marginTop: '30px' }}>
                                         <button className={styles.btnCancel} onClick={() => setIsEditProductModalOpen(false)}>{t('cancel')}</button>
                                         <button className={styles.btnSaveLux} onClick={async () => {
+                                             if (!editingProduct.name || !editingProduct.price) {
+                                                 swalLux('warning', t('fillAllFields') || 'Veuillez remplir tous les champs obligatoires');
+                                                 return;
+                                             }
+                                             const priceNum = parseFloat(editingProduct.price);
+                                             if (isNaN(priceNum)) {
+                                                 swalLux('error', 'Prix invalide');
+                                                 return;
+                                             }
                                             try {
                                                 await updateProduct({
                                                     variables: {
                                                         id: editingProduct.id,
                                                         name: editingProduct.name,
                                                         description: editingProduct.description,
-                                                        price: parseFloat(editingProduct.price),
+                                                        price: priceNum,
                                                         image: editingProduct.image
                                                     }
                                                 });

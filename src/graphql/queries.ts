@@ -144,9 +144,6 @@ export const GET_PRODUCTS = gql`
       name
       description
       price
-      price_homme
-      price_femme
-      visibility
       image
     }
   }
