@@ -6127,6 +6127,57 @@
     .revenueFilterRow {
         flex-direction: column !important;
         gap: 15px !important;
+        align-items: stretch !important;
+    }
+
+    .datePickerGroup {
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 10px !important;
+    }
+
+    .dateField {
+        width: 100% !important;
+    }
+
+    .dateField input {
+        width: 100% !important;
+    }
+
+    .quickFilterGroup {
+        flex-wrap: wrap !important;
+        justify-content: stretch !important;
+        width: 100% !important;
+    }
+
+    .quickFilterBtn {
+        flex: 1 1 calc(33.33% - 8px) !important;
+        text-align: center !important;
+        padding: 10px 5px !important;
+        font-size: 0.7rem !important;
+    }
+
+    .revenueStatsBanner {
+        grid-template-columns: 1fr !important;
+        gap: 10px !important;
+        margin-bottom: 20px !important;
+    }
+
+    .bannerMain, .bannerSub {
+        padding: 15px !important;
+    }
+
+    .bannerMain strong {
+        font-size: 1.6rem !important;
+    }
+
+    .bannerSub strong {
+        font-size: 1.4rem !important;
+    }
+
+    .goalContainer {
+        padding: 15px !important;
+        margin-bottom: 20px !important;
     }
 
     .searchGroup {

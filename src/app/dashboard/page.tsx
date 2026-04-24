@@ -266,7 +266,7 @@ export default function Dashboard() {
     const [user, setUser] = useState<any>(null);
 
     const { data, loading, error } = useQuery<DashboardData>(GET_DASHBOARD_DATA, {
-        variables: { userId: user?.id }
+        variables: { userId: user?.role === 'admin' ? null : user?.id }
     });
     const { data: productsData } = useQuery<ProductsData>(GET_PRODUCTS);
     const { data: waitingData } = useQuery<WaitingData>(GET_WAITING_DATA, {
@@ -276,16 +276,16 @@ export default function Dashboard() {
     const [createReservation] = useMutation(CREATE_RESERVATION_MUTATION, {
         refetchQueries: [
             { query: GET_WAITING_DATA, variables: { userId: user?.id } },
-            { query: GET_DASHBOARD_DATA, variables: { userId: user?.id } }
+            { query: GET_DASHBOARD_DATA, variables: { userId: user?.role === 'admin' ? null : user?.id } }
         ]
     });
     const [addWaitingComment] = useMutation(ADD_WAITING_COMMENT_MUTATION);
     const [addTip] = useMutation(ADD_TIP_MUTATION);
     const [applyReferralCode] = useMutation(APPLY_REFERRAL_CODE_MUTATION, {
-        refetchQueries: [{ query: GET_DASHBOARD_DATA, variables: { userId: user?.id } }]
+        refetchQueries: [{ query: GET_DASHBOARD_DATA, variables: { userId: user?.role === 'admin' ? null : user?.id } }]
     });
     const [generateReferralCode] = useMutation(GENERATE_REFERRAL_CODE_MUTATION, {
-        refetchQueries: [{ query: GET_DASHBOARD_DATA, variables: { userId: user?.id } }]
+        refetchQueries: [{ query: GET_DASHBOARD_DATA, variables: { userId: user?.role === 'admin' ? null : user?.id } }]
     });
     const [addPersonnelEvaluation] = useMutation(ADD_PERSONNEL_EVALUATION_MUTATION);
     const [deleteReservation] = useMutation(DELETE_RESERVATION_MUTATION, {
@@ -592,14 +592,43 @@ export default function Dashboard() {
         if (!data?.allReservations || !data?.clients) return [];
         const spending: Record<string, number> = {};
         data.allReservations.forEach(r => {
-            if (r.status === 'confirmed' && r.user?.id) {
-                spending[r.user.id] = (spending[r.user.id] || 0) + (r.service?.price || 0);
+            if ((r.status === 'confirmed' || r.status === 'paid' || r.status === 'completed') && r.user?.id) {
+                spending[r.user.id] = (spending[r.user.id] || 0) + (r.total_price || r.service?.price || 0);
             }
         });
         return data.clients
             .map(c => ({ ...c, totalSpent: spending[c.id] || 0 }))
             .sort((a, b) => b.totalSpent - a.totalSpent)
             .slice(0, 3);
+    };
+
+    const getRevenueTrend = () => {
+        if (!data?.allReservations) return 0;
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const lastMonth = currentMonth === 0 ? 11 : currentMonth - 1;
+        const lastMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
+
+        let currentMonthRev = 0;
+        let lastMonthRev = 0;
+
+        data.allReservations.forEach((r: any) => {
+            if (r.status === 'confirmed' || r.status === 'paid' || r.status === 'completed') {
+                const d = new Date(r.date);
+                if (!isNaN(d.getTime())) {
+                    const val = r.total_price || r.service?.price || 0;
+                    if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+                        currentMonthRev += val;
+                    } else if (d.getMonth() === lastMonth && d.getFullYear() === lastMonthYear) {
+                        lastMonthRev += val;
+                    }
+                }
+            }
+        });
+
+        if (lastMonthRev === 0) return currentMonthRev > 0 ? 100 : 0;
+        return ((currentMonthRev - lastMonthRev) / lastMonthRev) * 100;
     };
 
     const getPeakHours = () => {
@@ -682,7 +711,7 @@ export default function Dashboard() {
             const dateObj = new Date(r.date);
             if (isNaN(dateObj.getTime())) return false;
             const d = formatLocalDate(dateObj);
-            return r.status === 'confirmed' && d >= revenueDateRange.start && d <= revenueDateRange.end;
+            return (r.status === 'confirmed' || r.status === 'paid' || r.status === 'completed') && d >= revenueDateRange.start && d <= revenueDateRange.end;
         });
 
         const breakdown: Record<string, { count: number, total: number }> = {};
@@ -690,7 +719,7 @@ export default function Dashboard() {
             const name = r.prestataire?.name || 'Non assigné';
             if (!breakdown[name]) breakdown[name] = { count: 0, total: 0 };
             breakdown[name].count++;
-            breakdown[name].total += (r.service?.price || 0);
+            breakdown[name].total += (r.total_price || r.service?.price || 0);
         });
 
         return Object.entries(breakdown).map(([name, stats]) => ({ name, ...stats }));
@@ -703,7 +732,7 @@ export default function Dashboard() {
             const dateObj = new Date(r.date);
             if (isNaN(dateObj.getTime())) return false;
             const d = formatLocalDate(dateObj);
-            return r.status === 'confirmed' && d >= revenueDateRange.start && d <= revenueDateRange.end;
+            return (r.status === 'confirmed' || r.status === 'paid' || r.status === 'completed') && d >= revenueDateRange.start && d <= revenueDateRange.end;
         });
 
         const breakdown: Record<string, { count: number, total: number }> = {};
@@ -711,7 +740,7 @@ export default function Dashboard() {
             const name = r.service?.name || 'Service Inconnu';
             if (!breakdown[name]) breakdown[name] = { count: 0, total: 0 };
             breakdown[name].count++;
-            breakdown[name].total += (r.service?.price || 0);
+            breakdown[name].total += (r.total_price || r.service?.price || 0);
         });
 
         return Object.entries(breakdown).map(([name, stats]) => ({ name, ...stats }));
@@ -1298,11 +1327,11 @@ export default function Dashboard() {
                                                 </div>
                                                 <div className={styles.statInfoLux}>
                                                     <span className={styles.statValueLux}>
-                                                        {data?.allReservations?.reduce((acc: number, res: any) => acc + (res.status === 'confirmed' ? res.service.price : 0), 0).toLocaleString()} <small>DT</small>
+                                                        {data?.allReservations?.reduce((acc: number, res: any) => acc + ((res.status === 'confirmed' || res.status === 'paid' || res.status === 'completed') ? (res.total_price || res.service?.price || 0) : 0), 0).toLocaleString()} <small>DT</small>
                                                     </span>
                                                     <span className={styles.statLabelLux}>Total Revenue</span>
-                                                    <div className={styles.statTrendLux} style={{ color: '#D62828' }}>
-                                                        <BarChart3 size={14} /> <span>+5.4%</span>
+                                                    <div className={styles.statTrendLux} style={{ color: getRevenueTrend() >= 0 ? '#2D6A4F' : '#D62828' }}>
+                                                        <BarChart3 size={14} /> <span>{getRevenueTrend() > 0 ? '+' : ''}{getRevenueTrend().toFixed(1)}%</span>
                                                     </div>
                                                 </div>
                                                 <Activity className={styles.statGraphIcon} size={60} style={{ color: '#D62828' }} />
@@ -4290,6 +4319,14 @@ export default function Dashboard() {
                                         </div>
                                         <div className={styles.quickFilterGroup}>
                                             <button className={styles.quickFilterBtn} onClick={() => setRevenueDateRange({ start: formatLocalDate(new Date()), end: formatLocalDate(new Date()) })}>Aujourd'hui</button>
+                                            <button className={styles.quickFilterBtn} onClick={() => {
+                                                const now = new Date();
+                                                const day = now.getDay();
+                                                const diff = now.getDate() - day + (day === 0 ? -6 : 1);
+                                                const start = formatLocalDate(new Date(now.setDate(diff)));
+                                                const end = formatLocalDate(new Date());
+                                                setRevenueDateRange({ start, end });
+                                            }}>Cette Semaine</button>
                                             <button className={styles.quickFilterBtn} onClick={() => {
                                                 const start = formatLocalDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
                                                 const end = formatLocalDate(new Date());
