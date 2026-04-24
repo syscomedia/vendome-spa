@@ -13,7 +13,9 @@ export async function GET(request: Request) {
         return NextResponse.redirect(new URL('/', request.url));
     }
 
-    const REDIRECT_URI = 'http://localhost:3000/api/auth/google-calendar';
+    const protocol = request.headers.get('x-forwarded-proto') || 'http';
+    const host = request.headers.get('host');
+    const REDIRECT_URI = `${protocol}://${host}/api/auth/google-calendar`;
 
     if (!code) {
         // Step 1: Redirect to Google
@@ -47,7 +49,7 @@ export async function GET(request: Request) {
         const { tokens } = await oauth2Client.getToken(code);
         
         await query(
-            "UPDATE users SET google_calendar_token = $1, google_calendar_refresh_token = $2 WHERE email = $3",
+            'UPDATE "User" SET google_calendar_token = $1, google_calendar_refresh_token = $2 WHERE email = $3',
             [tokens.access_token, tokens.refresh_token, session.user.email]
         );
 
