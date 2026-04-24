@@ -7,9 +7,17 @@ export const GET_DASHBOARD_DATA = gql`
       name
       description
       price
+      price_homme
+      price_femme
+      visibility
       image
       duration
       enabled
+      categoryId
+    }
+    serviceCategories {
+      id
+      name
     }
     prestataires {
       id
@@ -25,6 +33,7 @@ export const GET_DASHBOARD_DATA = gql`
       prec_expertise
       award_badge
       calendar_color_id
+      service_id
     }
     amenities {
       name
@@ -34,6 +43,11 @@ export const GET_DASHBOARD_DATA = gql`
       points
       tier
       nextReward
+      referral_code
+      referred_by {
+        id
+        name
+      }
     }
     serviceHistory {
       id
@@ -70,21 +84,35 @@ export const GET_DASHBOARD_DATA = gql`
       last_visit_notes
       image
       is_blocked
+      referral_code
+      referred_by {
+        id
+        name
+      }
     }
     allReservations: myReservations {
       id
       date
       status
+      duration
+      total_price
+      drink_choice
+      genre
       service {
         id
         name
         price
+      price_homme
+      price_femme
+      visibility
         duration
+        visibility
       }
       user {
         id
         name
         email
+        drink_pref
       }
       prestataire {
         id
@@ -100,6 +128,12 @@ export const GET_DASHBOARD_DATA = gql`
       endDate
       reservationId
     }
+    allDrinks {
+      id
+      name
+      image
+      available
+    }
   }
 `;
 
@@ -110,6 +144,9 @@ export const GET_PRODUCTS = gql`
       name
       description
       price
+      price_homme
+      price_femme
+      visibility
       image
     }
   }
@@ -128,12 +165,19 @@ export const GET_WAITING_DATA = gql`
     myReservations(userId: $userId) {
         id
         status
+      duration
+      total_price
         date
         service {
             name
             duration
+        visibility
             price
+      price_homme
+      price_femme
+      visibility
         }
+        drink_choice
         prestataire {
             name
             role
@@ -149,9 +193,15 @@ export const GET_USER_RESERVATIONS = gql`
       id
       date
       status
+      duration
+      total_price
+      drink_choice
       service {
         name
         price
+      price_homme
+      price_femme
+      visibility
         image
       }
       prestataire {
@@ -170,9 +220,21 @@ export const GET_SERVICE = gql`
       name
       description
       price
+      price_homme
+      price_femme
+      visibility
       image
       duration
       enabled
+      categoryId
+    }
+  }
+`;
+export const GET_SERVICE_CATEGORIES = gql`
+  query GetServiceCategories {
+    serviceCategories {
+      id
+      name
     }
   }
 `;
@@ -237,6 +299,7 @@ export const GET_SPECIALIST = gql`
       prec_expertise
       award_badge
       calendar_color_id
+      service_id
       evaluations {
         id
         rating
@@ -247,6 +310,31 @@ export const GET_SPECIALIST = gql`
           image
         }
       }
+    }
+  }
+`;
+
+export const ADD_DRINK = gql`
+  mutation AddDrink($name: String!, $image: String) {
+    addDrink(name: $name, image: $image) {
+      id
+      name
+      image
+    }
+  }
+`;
+
+export const REMOVE_DRINK = gql`
+  mutation RemoveDrink($id: ID!) {
+    removeDrink(id: $id)
+  }
+`;
+
+export const UPDATE_RESERVATION_DRINK = gql`
+  mutation UpdateReservationDrink($id: ID!, $drinkChoice: String!) {
+    updateReservationDrink(id: $id, drinkChoice: $drinkChoice) {
+      id
+      drink_choice
     }
   }
 `;

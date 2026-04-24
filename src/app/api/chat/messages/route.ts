@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
         if (inbox && adminId) {
             // Return list of users who have chatted, with last message + unread count
             const res = await query(`
+                WITH admin_ids AS (SELECT id FROM users WHERE role = 'admin')
                 SELECT DISTINCT ON (u.id)
                     u.id, u.name, u.email, u.image, u.tier,
                     cm.content as last_message,
@@ -21,39 +22,38 @@ export async function GET(req: NextRequest) {
                     cm.sender_id,
                     (
                         SELECT COUNT(*) FROM chat_messages
-                        WHERE receiver_id = $1
+                        WHERE receiver_id IN (SELECT id FROM admin_ids)
                           AND sender_id = u.id
                           AND is_read = FALSE
                     ) as unread_count
                 FROM chat_messages cm
                 JOIN users u ON (
-                    CASE WHEN cm.sender_id = $1 THEN cm.receiver_id ELSE cm.sender_id END = u.id
+                    CASE 
+                        WHEN cm.sender_id IN (SELECT id FROM admin_ids) THEN cm.receiver_id 
+                        ELSE cm.sender_id 
+                    END = u.id
                 )
-                WHERE cm.sender_id = $1 OR cm.receiver_id = $1
+                WHERE (cm.sender_id IN (SELECT id FROM admin_ids) OR cm.receiver_id IN (SELECT id FROM admin_ids))
+                  AND u.role != 'admin'
                 ORDER BY u.id, cm.created_at DESC
-            `, [adminId]);
+            `);
             return NextResponse.json({ conversations: res.rows });
         }
 
         if (userId && adminId) {
             // Fetch full conversation between user and admin
             const res = await query(`
+                WITH admin_ids AS (SELECT id FROM users WHERE role = 'admin')
                 SELECT
                     cm.id, cm.content, cm.created_at, cm.is_read,
                     cm.sender_id,
                     u.name as sender_name, u.image as sender_image, u.role as sender_role
                 FROM chat_messages cm
                 JOIN users u ON cm.sender_id = u.id
-                WHERE (cm.sender_id = $1 AND cm.receiver_id = $2)
-                   OR (cm.sender_id = $2 AND cm.receiver_id = $1)
+                WHERE (cm.sender_id = $1 AND cm.receiver_id IN (SELECT id FROM admin_ids))
+                   OR (cm.sender_id IN (SELECT id FROM admin_ids) AND cm.receiver_id = $1)
                 ORDER BY cm.created_at ASC
-            `, [userId, adminId]);
-
-            // Mark messages from user as read (admin is reading)
-            await query(`
-                UPDATE chat_messages SET is_read = TRUE
-                WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE
-            `, [userId, adminId]);
+            `, [userId]);
 
             return NextResponse.json({ messages: res.rows });
         }
@@ -93,15 +93,14 @@ export async function POST(req: NextRequest) {
             sender_role: sender.role,
         };
 
-        // Broadcast to receiver
         const event = { type: 'new_message', message: msg };
-        broadcastToUser(String(receiverId), event);
 
-        // If sender is client, also broadcast to all admins (for inbox badge update)
         if (sender.role !== 'admin') {
+            // Client sent → notify the receiver admin + broadcast to all admins for inbox badge
+            broadcastToUser(String(receiverId), event);
             broadcastToAdmins({ type: 'new_message', message: msg });
         } else {
-            // Admin sent → notify the specific client
+            // Admin sent → notify the specific client only
             broadcastToUser(String(receiverId), event);
         }
 
@@ -113,13 +112,35 @@ export async function POST(req: NextRequest) {
 }
 
 // PATCH /api/chat/messages → mark messages as read
+// Body: { readerId, clientId }
+// readerId = the person who just read (client or admin)
+// clientId = the non-admin user in this conversation
 export async function PATCH(req: NextRequest) {
     try {
-        const { senderId, receiverId } = await req.json();
+        const body = await req.json();
+        // Support both old format { senderId, receiverId } and new { readerId, clientId }
+        const readerId: number = body.readerId ?? body.receiverId;
+        const clientId: number = body.clientId ?? body.senderId;
+
+        // Mark client→admin messages as read (reader is admin)
         await query(`
             UPDATE chat_messages SET is_read = TRUE
-            WHERE sender_id = $1 AND receiver_id = $2 AND is_read = FALSE
-        `, [senderId, receiverId]);
+            WHERE sender_id = $1
+              AND receiver_id IN (SELECT id FROM users WHERE role = 'admin')
+              AND is_read = FALSE
+        `, [clientId]);
+
+        // Mark admin→client messages as read (reader is client)
+        await query(`
+            UPDATE chat_messages SET is_read = TRUE
+            WHERE sender_id IN (SELECT id FROM users WHERE role = 'admin')
+              AND receiver_id = $1
+              AND is_read = FALSE
+        `, [clientId]);
+
+        // Broadcast to all admins so their ✓✓ turns blue for this client's conversation
+        broadcastToAdmins({ type: 'messages_read', clientId });
+
         return NextResponse.json({ ok: true });
     } catch (e) {
         return NextResponse.json({ error: 'Server error' }, { status: 500 });

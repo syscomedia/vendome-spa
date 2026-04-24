@@ -59,8 +59,11 @@ import {
     X,
     Eye,
     EyeOff,
-    Check
+    Check,
+    Coffee,
+    Download
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const GOOGLE_CALENDAR_COLORS = [
     { id: '1', hex: '#7986cb', name: 'Lavender' },
@@ -77,12 +80,22 @@ const GOOGLE_CALENDAR_COLORS = [
 ];
 
 import { useQuery, useMutation } from '@apollo/client/react';
-import { GET_DASHBOARD_DATA, GET_PRODUCTS, GET_WAITING_DATA, GET_ALL_FEEDBACK, GET_CLIENT_NOTES } from '@/graphql/queries';
+import {
+    GET_DASHBOARD_DATA,
+    GET_PRODUCTS,
+    GET_WAITING_DATA,
+    GET_ALL_FEEDBACK,
+    GET_CLIENT_NOTES,
+    ADD_DRINK,
+    REMOVE_DRINK,
+    UPDATE_RESERVATION_DRINK
+} from '@/graphql/queries';
 import {
     CREATE_RESERVATION_MUTATION,
     ADD_WAITING_COMMENT_MUTATION,
     ADD_TIP_MUTATION,
-    APPLY_REFERRAL_MUTATION,
+    APPLY_REFERRAL_CODE_MUTATION,
+    GENERATE_REFERRAL_CODE_MUTATION,
     ADD_PERSONNEL_EVALUATION_MUTATION,
     DELETE_RESERVATION_MUTATION,
     TOGGLE_SERVICE_MUTATION,
@@ -105,7 +118,10 @@ import {
     UPDATE_RESERVATION_DATE_MUTATION,
     SYNC_GOOGLE_CALENDAR_MUTATION,
     CONVERT_EXTERNAL_TO_RESERVATION_MUTATION,
-    PURCHASE_PRODUCT_MUTATION
+    PURCHASE_PRODUCT_MUTATION,
+    ADD_SERVICE_CATEGORY_MUTATION,
+    UPDATE_SERVICE_CATEGORY_MUTATION,
+    REMOVE_SERVICE_CATEGORY_MUTATION
 } from '@/graphql/mutations';
 import { signOut, signIn } from 'next-auth/react';
 
@@ -117,12 +133,19 @@ interface DashboardData {
         points: number;
         tier: string;
         nextReward: number;
+        referral_code?: string;
+        referred_by?: {
+            id: string;
+            name: string;
+        };
     };
     serviceHistory: any[];
     recommendations: any[];
     clients: any[];
     allReservations: any[];
     externalEvents: any[];
+    allDrinks: any[];
+    serviceCategories: any[];
 }
 
 interface ExternalEvent {
@@ -175,12 +198,68 @@ const swalLux = (icon: 'success' | 'error' | 'warning' | 'info' | 'question', ti
         didOpen: (popup) => {
             // Force high z-index to stay above other modals on mobile
             const container = Swal.getContainer();
-            if (container) container.style.zIndex = '3000';
+            if (container) container.style.zIndex = '99999';
             if (options.didOpen) options.didOpen(popup);
         },
         ...options
     });
 };
+
+const ServiceItem = ({ service, t, styles, toggleService, removeService, setEditingService, setIsEditServiceModalOpen }: any) => (
+    <div key={service.id} className={styles.serviceCard} style={{ opacity: service.enabled === false ? 0.6 : 1 }}>
+        <div className={styles.serviceImgWrapper}>
+            {service.image ? (
+                <img src={service.image} alt={service.name} />
+            ) : (
+                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #FDFCFB 0%, #E2D1C3 100%)' }}>
+                    <Sparkles size={48} color="rgba(223, 185, 109, 0.5)" />
+                </div>
+            )}
+            <div className={styles.servicePrice}>{service.price} DT</div>
+            <div style={{ position: 'absolute', top: '25px', insetInlineStart: '25px' }}>
+                <span className={`${styles.serviceStatus} ${service.enabled !== false ? styles.statusActive : styles.statusDisabled}`}>
+                    {service.enabled !== false ? t('active') : t('disabled')}
+                </span>
+            </div>
+        </div>
+        <div className={styles.serviceInfo}>
+            <h3 style={{ textAlign: 'center', marginBottom: '15px' }}>{service.name}</h3>
+            <p style={{ textAlign: 'center', minHeight: '60px' }}>{service.description}</p>
+            <div className={styles.modalActions} style={{ marginTop: '15px', flexWrap: 'wrap' }}>
+                <button
+                    className={styles.btnSaveLux}
+                    style={{ flex: '1 1 120px' }}
+                    onClick={() => {
+                        setEditingService(service);
+                        setIsEditServiceModalOpen(true);
+                    }}
+                >
+                    {t('edit')}
+                </button>
+                <button
+                    className={styles.btnCancel}
+                    style={{ flex: '1 1 120px' }}
+                    onClick={async () => {
+                        await toggleService({ variables: { id: service.id, enabled: service.enabled === false } });
+                    }}
+                >
+                    {service.enabled === false ? t('enable') : t('disable')}
+                </button>
+                <button
+                    className={styles.btnDeleteLux}
+                    style={{ flex: '1 1 100%' }}
+                    onClick={async () => {
+                        if (confirm(t('confirmDeleteService'))) {
+                            await removeService({ variables: { id: service.id } });
+                        }
+                    }}
+                >
+                    {t('remove')}
+                </button>
+            </div>
+        </div>
+    </div>
+);
 
 export default function Dashboard() {
     const [mounted, setMounted] = useState(false);
@@ -202,7 +281,12 @@ export default function Dashboard() {
     });
     const [addWaitingComment] = useMutation(ADD_WAITING_COMMENT_MUTATION);
     const [addTip] = useMutation(ADD_TIP_MUTATION);
-    const [applyReferral] = useMutation(APPLY_REFERRAL_MUTATION);
+    const [applyReferralCode] = useMutation(APPLY_REFERRAL_CODE_MUTATION, {
+        refetchQueries: [{ query: GET_DASHBOARD_DATA, variables: { userId: user?.id } }]
+    });
+    const [generateReferralCode] = useMutation(GENERATE_REFERRAL_CODE_MUTATION, {
+        refetchQueries: [{ query: GET_DASHBOARD_DATA, variables: { userId: user?.id } }]
+    });
     const [addPersonnelEvaluation] = useMutation(ADD_PERSONNEL_EVALUATION_MUTATION);
     const [deleteReservation] = useMutation(DELETE_RESERVATION_MUTATION, {
         refetchQueries: [{ query: GET_WAITING_DATA, variables: { userId: user?.id } }]
@@ -228,6 +312,12 @@ export default function Dashboard() {
     const [syncGoogleCalendar] = useMutation(SYNC_GOOGLE_CALENDAR_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [convertExternalToReservation] = useMutation(CONVERT_EXTERNAL_TO_RESERVATION_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [purchaseProduct] = useMutation(PURCHASE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [addDrink] = useMutation(ADD_DRINK, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [removeDrink] = useMutation(REMOVE_DRINK, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [updateReservationDrink] = useMutation(UPDATE_RESERVATION_DRINK, { refetchQueries: [{ query: GET_DASHBOARD_DATA }, { query: GET_WAITING_DATA, variables: { userId: user?.id } }] });
+    const [addServiceCategory] = useMutation(ADD_SERVICE_CATEGORY_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [updateServiceCategory] = useMutation(UPDATE_SERVICE_CATEGORY_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [removeServiceCategory] = useMutation(REMOVE_SERVICE_CATEGORY_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
 
     const getColorHex = (id: string) => GOOGLE_CALENDAR_COLORS.find(c => c.id === id)?.hex || 'transparent';
 
@@ -247,20 +337,40 @@ export default function Dashboard() {
     const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [bookingService, setBookingService] = useState<any>(null);
+    const [bookingDuration, setBookingDuration] = useState(90);
+    const [selectedGender, setSelectedGender] = useState('femme');
+
+    const parseDuration = (dur: string) => {
+        if (!dur) return 90;
+        const match = dur.match(/\d+/);
+        return match ? parseInt(match[0]) : 90;
+    };
+
+    const calculateDynamicPrice = (basePrice: number, baseDurationStr: string, selectedDuration: number) => {
+        const baseDuration = parseDuration(baseDurationStr);
+        if (baseDuration === 0) return basePrice;
+        return (basePrice / baseDuration) * selectedDuration;
+    };
     const [bookingDate, setBookingDate] = useState('');
     const [bookingStaff, setBookingStaff] = useState('');
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [selectedReservationForPayment, setSelectedReservationForPayment] = useState<any>(null);
     const [paymentModeLine, setPaymentModeLine] = useState('');
+    const [isAddServiceCatOpen, setIsAddServiceCatOpen] = useState(false);
+    const [isEditServiceCatOpen, setIsEditServiceCatOpen] = useState(false);
     const [pointsToDeduct, setPointsToDeduct] = useState<string>('');
     const [usePointsCombo, setUsePointsCombo] = useState(false);
     const [secondaryPaymentMode, setSecondaryPaymentMode] = useState('');
     const [isAddServiceModalOpen, setIsAddServiceModalOpen] = useState(false);
-    const [newService, setNewService] = useState({ name: '', description: '', price: '', image: '', duration: '' });
+    const [newService, setNewService] = useState({ name: '', description: '', price: '', price_homme: '', price_femme: '', image: '', duration: '', visibility: 'both', categoryId: '' });
     const [isEditClientModalOpen, setIsEditClientModalOpen] = useState(false);
     const [editingClient, setEditingClient] = useState<any>(null);
     const [isEditServiceModalOpen, setIsEditServiceModalOpen] = useState(false);
     const [editingService, setEditingService] = useState<any>(null);
+
+    const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+    const [newCategoryName, setNewCategoryName] = useState('');
+    const [editingCategory, setEditingCategory] = useState<any>(null);
     const [isAddClientModalOpen, setIsAddClientModalOpen] = useState(false);
     const [newClient, setNewClient] = useState({ name: '', email: '', password: '', role: 'client', tier: 'Normal', phone: '', birthday: '', image: '' });
     const [isClientsModalOpen, setIsClientsModalOpen] = useState(false);
@@ -279,11 +389,11 @@ export default function Dashboard() {
     const [newProduct, setNewProduct] = useState({ name: '', description: '', price: '', image: '' });
     const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
     const [isAddSpecialistModalOpen, setIsAddSpecialistModalOpen] = useState(false);
-    const [newSpecialist, setNewSpecialist] = useState({ 
-        name: '', 
-        role: '', 
-        specialty: '', 
-        image: '', 
+    const [newSpecialist, setNewSpecialist] = useState({
+        name: '',
+        role: '',
+        specialty: '',
+        image: '',
         rating: 5.0,
         satisfied_clients: '1.2k',
         tech_expertise: 95,
@@ -291,7 +401,8 @@ export default function Dashboard() {
         prec_expertise: 95,
         award_badge: 'Meilleur Spécialiste',
         historique: '',
-        calendar_color_id: '1'
+        calendar_color_id: '1',
+        serviceId: ''
     });
     const [editingProduct, setEditingProduct] = useState<any>(null);
     const [isFicheModalOpen, setIsFicheModalOpen] = useState(false);
@@ -320,7 +431,97 @@ export default function Dashboard() {
     const [manualSpecialistSearch, setManualSpecialistSearch] = useState('');
     const [selectedManualDate, setSelectedManualDate] = useState(new Date());
     const [selectedManualTime, setSelectedManualTime] = useState('09:00');
+    const [isAddSpecServiceOpen, setIsAddSpecServiceOpen] = useState(false);
+    const [isEditSpecServiceOpen, setIsEditSpecServiceOpen] = useState(false);
+    const [clientSearch, setClientSearch] = useState('');
+    const [showReferralsInFiche, setShowReferralsInFiche] = useState(false);
     const { t, language, setLanguage } = useLanguage();
+
+    const handleAddCategory = async () => {
+        if (!newCategoryName.trim()) return;
+        try {
+            await addServiceCategory({ variables: { name: newCategoryName } });
+            setNewCategoryName('');
+            setEditingCategory(null);
+            swalLux('success', 'Catégorie ajoutée');
+        } catch (e) {
+            console.error(e);
+            swalLux('error', 'Erreur', 'Impossible d\'ajouter la catégorie');
+        }
+    };
+
+    const [serviceSearchTerm, setServiceSearchTerm] = useState('');
+    const [serviceCategoryFilter, setServiceCategoryFilter] = useState('');
+    const [isServiceCategoryDropdownOpen, setIsServiceCategoryDropdownOpen] = useState(false);
+    const categoryDropdownRef = useRef<HTMLDivElement>(null);
+
+    const [clientTierFilter, setClientTierFilter] = useState('');
+    const [isClientTierDropdownOpen, setIsClientTierDropdownOpen] = useState(false);
+    const clientTierDropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (categoryDropdownRef.current && !categoryDropdownRef.current.contains(event.target as Node)) {
+                setIsServiceCategoryDropdownOpen(false);
+            }
+            if (clientTierDropdownRef.current && !clientTierDropdownRef.current.contains(event.target as Node)) {
+                setIsClientTierDropdownOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const handleUpdateCategory = async () => {
+        if (!editingCategory || !newCategoryName.trim()) return;
+        try {
+            await updateServiceCategory({ variables: { id: editingCategory.id, name: newCategoryName } });
+            setEditingCategory(null);
+            setNewCategoryName('');
+            swalLux('success', 'Catégorie mise à jour');
+        } catch (e) {
+            console.error(e);
+            swalLux('error', 'Erreur', 'Impossible de mettre à jour la catégorie');
+        }
+    };
+
+    const handleRemoveCategory = async (id: string) => {
+        const result = await swalLux('warning', 'Supprimer la catégorie ?', 'Les services associés n\'auront plus de catégorie.', {
+            showCancelButton: true,
+            confirmButtonText: 'Supprimer'
+        });
+        if (result.isConfirmed) {
+            try {
+                await removeServiceCategory({ variables: { id } });
+                swalLux('success', 'Catégorie supprimée');
+            } catch (e) {
+                console.error(e);
+                swalLux('error', 'Erreur', 'Impossible de supprimer la catégorie');
+            }
+        }
+    };
+
+    const handleExportClients = () => {
+        if (!data?.clients) return;
+
+        // Filter out admin clients
+        const clientsToExport = data.clients.filter((c: any) => c.role !== 'admin');
+
+        // Map to correct columns
+        const exportData = clientsToExport.map((c: any) => ({
+            'Nom': c.name || '',
+            'Email': c.email || '',
+            'Téléphone': c.phone || ''
+        }));
+
+        // Create workbook and worksheet
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'Clients');
+
+        // Download file
+        XLSX.writeFile(wb, 'Vendome_Clients.xlsx');
+    };
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct' | 'ficheClient' | 'newClient' | 'editClient' | 'editSpecialist') => {
         const file = e.target.files?.[0];
@@ -337,7 +538,7 @@ export default function Dashboard() {
         const reader = new FileReader();
         reader.onloadend = () => {
             const base64String = reader.result as string;
-            
+
             if (type === 'new') {
                 setNewService({ ...newService, image: base64String });
             } else if (type === 'edit') {
@@ -418,7 +619,7 @@ export default function Dashboard() {
 
     const getTodaysAgenda = () => {
         const today = formatLocalDate(new Date());
-        
+
         const internal = (data?.allReservations || []).filter((res: any) => {
             const dateObj = new Date(res.date);
             if (isNaN(dateObj.getTime())) return false;
@@ -464,13 +665,13 @@ export default function Dashboard() {
         }).sort((a: any, b: any) => {
             const bdayA = new Date(a.birthday);
             const bdayB = new Date(b.birthday);
-            
+
             const nextA = new Date(today.getFullYear(), bdayA.getMonth(), bdayA.getDate());
             if (nextA < today) nextA.setFullYear(today.getFullYear() + 1);
-            
+
             const nextB = new Date(today.getFullYear(), bdayB.getMonth(), bdayB.getDate());
             if (nextB < today) nextB.setFullYear(today.getFullYear() + 1);
-            
+
             return nextA.getTime() - nextB.getTime();
         });
     };
@@ -534,9 +735,6 @@ export default function Dashboard() {
         setBookingService(null);
         setSelectedClientForFiche(null);
         setIsManualClientSearchOpen(false);
-        setIsManualServiceSearchOpen(false);
-        setIsManualSpecialistSearchOpen(false);
-        setIsManualDatePickerOpen(false);
     };
 
     const closeAllManualSelects = () => {
@@ -544,6 +742,10 @@ export default function Dashboard() {
         setIsManualServiceSearchOpen(false);
         setIsManualSpecialistSearchOpen(false);
         setIsManualDatePickerOpen(false);
+        setIsAddSpecServiceOpen(false);
+        setIsEditSpecServiceOpen(false);
+        setIsAddServiceCatOpen(false);
+        setIsEditServiceCatOpen(false);
     };
 
     const handleSync = async () => {
@@ -604,7 +806,7 @@ export default function Dashboard() {
                         <input type="hidden" id="swal-specialist" value="">
                         <div id="dropdown-specialist" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 998; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #eee; margin-top: 5px; max-height: 200px; overflow-y: auto; padding: 10px;">
                             <div id="list-specialist">
-                                ${data?.prestataires.map(p => `<div class="dropdown-item" data-id="${p.id}" data-name="${p.name}" style="padding: 10px 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; color: #444;">${p.name}</div>`).join('')}
+                                ${data?.prestataires.map(p => `<div class="dropdown-item specialist-item" data-id="${p.id}" data-name="${p.name}" data-service-id="${p.service_id}" style="padding: 10px 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; color: #444;">${p.name}</div>`).join('')}
                             </div>
                         </div>
                     </div>
@@ -763,7 +965,7 @@ export default function Dashboard() {
     const handleTimeChange = async (resId: string, currentDate: string) => {
         const currentD = new Date(currentDate);
         const availableHours = ['10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00'];
-        
+
         swalLux('question', 'Modifier l\'heure', `Sélectionnez une nouvelle heure pour cette séance`, {
             html: `
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px;">
@@ -786,7 +988,7 @@ export default function Dashboard() {
                         const [hh] = h.split(':').map(Number);
                         const newDate = new Date(currentD);
                         newDate.setHours(hh, 0, 0, 0);
-                        
+
                         Swal.showLoading();
                         try {
                             await updateReservationDate({ variables: { id: resId, date: newDate.toISOString() } });
@@ -838,7 +1040,7 @@ export default function Dashboard() {
                 if (isAdmin) setAdminUnreadCount(d.count || 0);
                 else setChatUnreadCount(d.count || 0);
             })
-            .catch(() => {});
+            .catch(() => { });
 
         const es = new EventSource(`/api/chat/sse?userId=${user.id}&role=${role}`);
         chatSseRef.current = es;
@@ -851,8 +1053,14 @@ export default function Dashboard() {
                     } else {
                         setChatUnreadCount(prev => prev + 1);
                     }
+                } else if (data.type === 'messages_read' && isAdmin) {
+                    // Refresh unread count when messages are read by any admin
+                    fetch(`/api/chat/unread?userId=${user.id}`)
+                        .then(r => r.json())
+                        .then(d => setAdminUnreadCount(d.count || 0))
+                        .catch(() => { });
                 }
-            } catch {}
+            } catch { }
         };
         es.onerror = () => es.close();
         return () => { es.close(); chatSseRef.current = null; };
@@ -865,9 +1073,10 @@ export default function Dashboard() {
 
     const {
         services = [],
+        serviceCategories = [],
         prestataires = [],
         amenities = [],
-        userLoyalty = { points: 0, tier: 'Guest', nextReward: 100 },
+        userLoyalty = { points: 0, tier: 'Guest', nextReward: 100, referral_code: '', referred_by: null } as any,
         serviceHistory = [],
         recommendations = []
     } = data || {} as DashboardData;
@@ -896,16 +1105,16 @@ export default function Dashboard() {
                                 { id: 'manage_services', icon: <Layers size={22} />, label: t('manageServices') },
                                 { id: 'clients', icon: <Users size={22} />, label: t('clients') },
                                 { id: 'feedback', icon: <Star size={22} />, label: t('feedback') },
-                                { id: 'notes', icon: <PenLine size={22} />, label: 'Notes Client' }
+                                { id: 'notes', icon: <PenLine size={22} />, label: t('notesClient') }
                             ] : []),
                             { id: 'providers', icon: <Users size={22} />, label: t('specialists') },
-                            ...(user?.role === 'admin' ? [{ id: 'caisse', icon: <DollarSign size={22} />, label: 'Caisse' }] : []),
+                            ...(user?.role === 'admin' ? [{ id: 'caisse', icon: <DollarSign size={22} />, label: t('caisse') }] : []),
                             { id: 'history', icon: <Clock size={22} />, label: t('history') },
                             { id: 'maintenant', icon: <Sparkles size={22} />, label: t('maintenant') },
                             { id: 'products', icon: <Gift size={22} />, label: t('products') },
                             ...(user?.role !== 'admin' ? [
-                                { id: 'fiche', icon: <ClipboardList size={22} />, label: 'Ma Fiche' },
-                                { id: 'notes', icon: <PenLine size={22} />, label: 'Mes Notes' }
+                                { id: 'fiche', icon: <ClipboardList size={22} />, label: t('maFiche') },
+                                { id: 'notes', icon: <PenLine size={22} />, label: t('mesNotes') }
                             ] : []),
                         ].map((item) => (
                             <button
@@ -998,16 +1207,16 @@ export default function Dashboard() {
                             { id: 'manage_services', icon: <Layers size={22} />, label: t('manageServices') },
                             { id: 'clients', icon: <Users size={22} />, label: t('clients') },
                             { id: 'feedback', icon: <Star size={22} />, label: t('feedback') },
-                            { id: 'notes', icon: <PenLine size={22} />, label: 'Notes Client' },
-                            { id: 'caisse', icon: <DollarSign size={22} />, label: 'Caisse' }
+                            { id: 'notes', icon: <PenLine size={22} />, label: t('notesClient') },
+                            { id: 'caisse', icon: <DollarSign size={22} />, label: t('caisse') }
                         ] : []),
                         { id: 'providers', icon: <Users size={22} />, label: t('specialists') },
                         { id: 'history', icon: <Clock size={22} />, label: t('history') },
                         { id: 'maintenant', icon: <Sparkles size={22} />, label: t('maintenant') },
                         { id: 'products', icon: <Gift size={22} />, label: t('products') },
                         ...(user?.role !== 'admin' ? [
-                            { id: 'fiche', icon: <ClipboardList size={22} />, label: 'Fiche' },
-                            { id: 'notes', icon: <PenLine size={22} />, label: 'Mes Notes' }
+                            { id: 'fiche', icon: <ClipboardList size={22} />, label: t('maFiche') },
+                            { id: 'notes', icon: <PenLine size={22} />, label: t('mesNotes') }
                         ] : []),
                     ].map((item) => (
                         <button
@@ -1041,7 +1250,7 @@ export default function Dashboard() {
                         {user?.role !== 'admin' && (
                             <div className={styles.tierBadge}>
                                 <Award size={16} />
-                                <span>{userLoyalty.tier}</span>
+                                <span>{t(userLoyalty.tier.toLowerCase().includes('gold') ? 'goldMember' : (userLoyalty.tier.toLowerCase().includes('guest') ? 'guest' : 'normalMember'))}</span>
                             </div>
                         )}
                         <h1 className={styles.welcomeText}>
@@ -1054,7 +1263,7 @@ export default function Dashboard() {
                         <div className={styles.loyaltyOrb}>
                             <div className={styles.orbInner}>
                                 <span className={styles.orbPoints}>{userLoyalty.points}</span>
-                                <span className={styles.orbLabel}>POINTS</span>
+                                <span className={styles.orbLabel}>{t('pointsLabel')}</span>
                             </div>
                             <svg className={styles.orbProgress} viewBox="0 0 120 120">
                                 <circle cx="60" cy="60" r="54" />
@@ -1181,25 +1390,25 @@ export default function Dashboard() {
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                                                         <Calendar size={20} color="#DFB96D" />
                                                         <h3 style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: '1.4rem' }}>Agenda du Jour</h3>
-                                                        <div style={{ 
-                                                            background: 'rgba(255, 71, 87, 0.1)', 
-                                                            color: '#ff4757', 
-                                                            fontSize: '0.65rem', 
-                                                            padding: '4px 10px', 
-                                                            borderRadius: '20px', 
+                                                        <div style={{
+                                                            background: 'rgba(255, 71, 87, 0.1)',
+                                                            color: '#ff4757',
+                                                            fontSize: '0.65rem',
+                                                            padding: '4px 10px',
+                                                            borderRadius: '20px',
                                                             fontWeight: 'bold',
                                                             letterSpacing: '1px'
                                                         }}>LIVE</div>
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '10px' }}>
-                                                        <button 
+                                                        <button
                                                             onClick={(e) => { e.stopPropagation(); setIsAddReservationModalOpen(true); }}
                                                             className={styles.agendaBtn}
                                                         >
                                                             <Plus size={16} />
                                                             <span>Ajouter</span>
                                                         </button>
-                                                        <button 
+                                                        <button
                                                             onClick={handleSync}
                                                             className={styles.agendaBtnAlt}
                                                         >
@@ -1208,7 +1417,7 @@ export default function Dashboard() {
                                                         </button>
                                                     </div>
                                                 </div>
-                                            <div className={styles.intelList}>
+                                                <div className={styles.intelList}>
                                                     {getTodaysAgenda().slice(0, 3).map((res: any) => (
                                                         <div key={res.id} className={styles.intelItem} style={res.type === 'external' ? {
                                                             background: 'linear-gradient(135deg, rgba(223, 185, 109, 0.03) 0%, rgba(223, 185, 109, 0.08) 100%)',
@@ -1217,10 +1426,10 @@ export default function Dashboard() {
                                                             padding: '15px',
                                                             marginBottom: '10px'
                                                         } : {}}>
-                                                            <div 
+                                                            <div
                                                                 className={styles.intelTime}
                                                                 onClick={() => user?.role === 'admin' && handleTimeChange(res.id, res.date)}
-                                                                style={{ 
+                                                                style={{
                                                                     cursor: user?.role === 'admin' ? 'pointer' : 'default',
                                                                     color: res.type === 'external' ? '#DFB96D' : 'inherit',
                                                                     fontWeight: res.type === 'external' ? 'bold' : 'normal'
@@ -1235,11 +1444,11 @@ export default function Dashboard() {
                                                                 </div>
                                                                 <div className={styles.specialistBadge}>
                                                                     {res.type === 'external' ? (
-                                                                        <span style={{ 
-                                                                            background: 'rgba(223, 185, 109, 0.1)', 
-                                                                            color: '#DFB96D', 
-                                                                            fontSize: '0.6rem', 
-                                                                            padding: '2px 8px', 
+                                                                        <span style={{
+                                                                            background: 'rgba(223, 185, 109, 0.1)',
+                                                                            color: '#DFB96D',
+                                                                            fontSize: '0.6rem',
+                                                                            padding: '2px 8px',
                                                                             borderRadius: '4px',
                                                                             textTransform: 'uppercase',
                                                                             fontWeight: 'bold'
@@ -1254,12 +1463,12 @@ export default function Dashboard() {
                                                             </div>
                                                             <div className={styles.agendaActions}>
                                                                 {res.type === 'external' ? (
-                                                                    <button 
-                                                                        className={styles.convertBtnLux} 
-                                                                        style={{ 
-                                                                            padding: '6px 15px', 
-                                                                            fontSize: '0.7rem', 
-                                                                            background: '#DFB96D', 
+                                                                    <button
+                                                                        className={styles.convertBtnLux}
+                                                                        style={{
+                                                                            padding: '6px 15px',
+                                                                            fontSize: '0.7rem',
+                                                                            background: '#DFB96D',
                                                                             color: 'white',
                                                                             borderRadius: '20px',
                                                                             border: 'none',
@@ -1277,9 +1486,9 @@ export default function Dashboard() {
                                                                     </button>
                                                                 ) : (
                                                                     <>
-                                                                        <div 
-                                                                            className={`${styles.intelStatus} ${styles[res.status]}`} 
-                                                                            style={{ 
+                                                                        <div
+                                                                            className={`${styles.intelStatus} ${styles[res.status]}`}
+                                                                            style={{
                                                                                 cursor: user?.role === 'admin' ? 'pointer' : 'default',
                                                                                 padding: '4px 12px',
                                                                                 borderRadius: '20px',
@@ -1382,7 +1591,7 @@ export default function Dashboard() {
                                                                 </div>
                                                             </div>
                                                             <div className={styles.birthdayActions}>
-                                                                <button 
+                                                                <button
                                                                     className={styles.actionBtn}
                                                                     onClick={() => {
                                                                         setInitialChatUserForInbox({
@@ -1398,8 +1607,8 @@ export default function Dashboard() {
                                                                 >
                                                                     <MessageSquare size={16} />
                                                                 </button>
-                                                                <a 
-                                                                    href={`mailto:${client.email}?subject=Joyeux Anniversaire !&body=Toute l'équipe de Vendôme Spa vous souhaite un excellent anniversaire !`} 
+                                                                <a
+                                                                    href={`mailto:${client.email}?subject=Joyeux Anniversaire !&body=Toute l'équipe de Vendôme Spa vous souhaite un excellent anniversaire !`}
                                                                     className={styles.actionBtn}
                                                                     title="Envoyer un email"
                                                                 >
@@ -1414,109 +1623,579 @@ export default function Dashboard() {
                                                 </div>
                                             </div>
                                         </div>
+
+                                        <div className={styles.adminIntelRow} style={{ marginTop: '30px' }}>
+                                            <div className={styles.intelCard} style={{ width: '100%' }}>
+                                                <div className={styles.intelHeader}>
+                                                    <Coffee size={20} color="var(--accent)" />
+                                                    <h3>Gestion des Rafraîchissements</h3>
+                                                    <button
+                                                        className={styles.addBtnSmall}
+                                                        style={{ marginLeft: 'auto', background: '#DFB96D', border: 'none', borderRadius: '50%', width: '28px', height: '28px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#1A0F0A', cursor: 'pointer' }}
+                                                        onClick={async () => {
+                                                            const { value: formValues } = await Swal.fire({
+                                                                title: 'Ajouter un rafraîchissement',
+                                                                html: `
+                                                                    <div style="display: flex; flex-direction: column; gap: 15px; padding: 10px;">
+                                                                        <input id="swal-input1" class="swal2-input" placeholder="Nom du boisson" style="width: 100%; margin: 0; border-radius: 12px; border: 1px solid #ddd;">
+                                                                        
+                                                                        <div id="image-preview-container" style="display: none; width: 100%; height: 150px; border-radius: 12px; overflow: hidden; margin-bottom: 10px; border: 1px solid #DFB96D;">
+                                                                            <img id="image-preview" src="" style="width: 100%; height: 100%; object-fit: cover;">
+                                                                        </div>
+
+                                                                        <label for="swal-input-file" style="
+                                                                            display: flex; 
+                                                                            flex-direction: column; 
+                                                                            align-items: center; 
+                                                                            justify-content: center; 
+                                                                            padding: 20px; 
+                                                                            border: 2px dashed #DFB96D; 
+                                                                            border-radius: 12px; 
+                                                                            cursor: pointer; 
+                                                                            background: rgba(223, 185, 109, 0.05);
+                                                                            transition: all 0.3s ease;
+                                                                        " onmouseover="this.style.background='rgba(223, 185, 109, 0.1)'" onmouseout="this.style.background='rgba(223, 185, 109, 0.05)'">
+                                                                            <div style="font-size: 24px; margin-bottom: 8px;">📷</div>
+                                                                            <div style="font-weight: 600; color: #433422; font-size: 0.9rem;">Choisir une image</div>
+                                                                            <div style="font-size: 0.75rem; color: #888; margin-top: 4px;">PNG, JPG ou WebP</div>
+                                                                            <input id="swal-input-file" type="file" accept="image/*" style="display: none;" onchange="
+                                                                                const reader = new FileReader();
+                                                                                reader.onload = (e) => {
+                                                                                    document.getElementById('image-preview').src = e.target.result;
+                                                                                    document.getElementById('image-preview-container').style.display = 'block';
+                                                                                };
+                                                                                if(this.files[0]) reader.readAsDataURL(this.files[0]);
+                                                                            ">
+                                                                        </label>
+                                                                    </div>
+                                                                `,
+                                                                focusConfirm: false,
+                                                                confirmButtonColor: '#DFB96D',
+                                                                confirmButtonText: 'Ajouter',
+                                                                showCancelButton: true,
+                                                                cancelButtonText: 'Annuler',
+                                                                background: '#F8F5F0',
+                                                                color: '#433422',
+                                                                preConfirm: async () => {
+                                                                    const name = (document.getElementById('swal-input1') as HTMLInputElement).value;
+                                                                    const fileInput = document.getElementById('swal-input-file') as HTMLInputElement;
+                                                                    let base64 = '';
+
+                                                                    if (fileInput.files && fileInput.files[0]) {
+                                                                        const reader = new FileReader();
+                                                                        base64 = await new Promise((resolve) => {
+                                                                            reader.onload = (e) => resolve(e.target?.result as string);
+                                                                            reader.readAsDataURL(fileInput.files![0]);
+                                                                        });
+                                                                    }
+
+                                                                    return [name, base64];
+                                                                }
+                                                            });
+
+                                                            if (formValues) {
+                                                                const [name, image] = formValues;
+                                                                if (name) {
+                                                                    try {
+                                                                        await addDrink({ variables: { name, image } });
+                                                                        swalLux('success', 'Ajouté', 'Le rafraîchissement a été ajouté.');
+                                                                    } catch {
+                                                                        swalLux('error', 'Erreur', 'Impossible d\'ajouter le rafraîchissement.');
+                                                                    }
+                                                                }
+                                                            }
+                                                        }}
+                                                    >
+                                                        <Plus size={16} />
+                                                    </button>
+                                                </div>
+                                                <div className={styles.intelList} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '15px' }}>
+                                                    {(data?.allDrinks || []).map((drink: any) => (
+                                                        <div key={drink.id} className={styles.intelItem} style={{ flexDirection: 'column', alignItems: 'center', textAlign: 'center', padding: '15px', background: 'rgba(223, 185, 109, 0.05)', borderRadius: '15px', border: '1px solid rgba(223, 185, 109, 0.1)' }}>
+                                                            {drink.image ? (
+                                                                <img src={drink.image} style={{ width: '60px', height: '60px', borderRadius: '12px', objectFit: 'cover', marginBottom: '10px' }} />
+                                                            ) : (
+                                                                <div style={{ width: '60px', height: '60px', borderRadius: '12px', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '10px' }}>
+                                                                    <Coffee color="#DFB96D" size={24} />
+                                                                </div>
+                                                            )}
+                                                            <strong style={{ fontSize: '0.9rem', marginBottom: '8px' }}>{drink.name}</strong>
+                                                            <button
+                                                                onClick={async () => {
+                                                                    if (confirm('Supprimer ce rafraîchissement ?')) {
+                                                                        await removeDrink({ variables: { id: drink.id } });
+                                                                    }
+                                                                }}
+                                                                style={{ background: 'transparent', border: 'none', color: '#999', fontSize: '0.7rem', cursor: 'pointer', textDecoration: 'underline' }}
+                                                            >
+                                                                Supprimer
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    {(data?.allDrinks || []).length === 0 && (
+                                                        <p style={{ gridColumn: '1/-1', textAlign: 'center', color: '#999', padding: '20px' }}>Aucun rafraîchissement configuré.</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
                                     </>
                                 )}
+
+
 
                                 {/* Luxury Services - Client ONLY */}
                                 {user?.role !== 'admin' && (
                                     <section className={styles.section}>
-                                        <div className={styles.sectionHeader}>
+                                        <div className={styles.sectionHeader} style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '40px' }}>
                                             <h2>{t('services')}</h2>
-                                            <div className={styles.headerLine} />
+                                            <div className={styles.headerLine} style={{ width: '100px', margin: '15px auto' }} />
                                         </div>
-                                        <div className={styles.servicesGrid}>
-                                            {services.filter((s: any) => s.enabled !== false).map((service: any, idx: number) => (
-                                                <motion.div
-                                                    key={service.id}
-                                                    initial={{ opacity: 0, x: 50 }}
-                                                    animate={{ opacity: 1, x: 0 }}
-                                                    transition={{ delay: idx * 0.1 }}
-                                                    className={styles.serviceCard}
-                                                    onClick={() => router.push(`/services/${service.id}`)}
-                                                    style={{ cursor: 'pointer' }}
+
+                                        {/* Search and Filter UI for Clients */}
+                                        <div style={{ maxWidth: '900px', margin: '0 auto 40px', display: 'flex', gap: '20px', flexWrap: 'wrap', padding: '0 20px' }}>
+                                            <div style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
+                                                <div style={{ 
+                                                    position: 'absolute', 
+                                                    insetInlineStart: '25px', 
+                                                    top: '50%', 
+                                                    transform: 'translateY(-50%)', 
+                                                    color: '#DFB96D', 
+                                                    display: 'flex', 
+                                                    alignItems: 'center',
+                                                    pointerEvents: 'none'
+                                                }}>
+                                                    <Search size={22} />
+                                                </div>
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder={t('searchService')} 
+                                                        value={serviceSearchTerm}
+                                                        onChange={(e) => setServiceSearchTerm(e.target.value)}
+                                                        style={{ 
+                                                            width: '100%', 
+                                                            paddingInlineStart: '65px',
+                                                            paddingInlineEnd: '25px',
+                                                            paddingTop: 0,
+                                                            paddingBottom: 0,
+                                                            borderRadius: '50px', 
+                                                            border: '1px solid rgba(223, 185, 109, 0.2)', 
+                                                            background: 'white', 
+                                                            color: '#1A0F0A', 
+                                                            outline: 'none',
+                                                            fontSize: '1rem',
+                                                            height: '60px',
+                                                            textAlign: 'start',
+                                                            boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
+                                                            transition: 'all 0.3s ease'
+                                                        }} 
+                                                    />
+                                            </div>
+                                            <div ref={categoryDropdownRef} style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
+                                                <button 
+                                                    onClick={() => setIsServiceCategoryDropdownOpen(!isServiceCategoryDropdownOpen)}
+                                                    style={{ 
+                                                        width: '100%',
+                                                        padding: '0 50px 0 30px', 
+                                                        borderRadius: '50px', 
+                                                        border: '1px solid rgba(223, 185, 109, 0.3)', 
+                                                        background: 'white', 
+                                                        color: '#DFB96D', 
+                                                        outline: 'none',
+                                                        cursor: 'pointer',
+                                                        height: '60px',
+                                                        fontSize: '0.95rem',
+                                                        fontWeight: '800',
+                                                        boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        transition: 'all 0.3s ease'
+                                                    }}
                                                 >
-                                                    <div className={styles.serviceImgWrapper}>
-                                                        <img src={service.image} alt={service.name} />
-                                                        <div className={styles.servicePrice}>{service.price}</div>
-                                                    </div>
-                                                    <div className={styles.serviceInfo}>
-                                                        <h3>{service.name}</h3>
-                                                        <p>{service.description}</p>
-                                                        <div className={styles.serviceFooter}>
-                                                            <span className={styles.duration}><Clock size={14} /> {service.duration}</span>
-                                                            <button className="btn-lux" onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setBookingService(service);
-                                                                setIsBookingModalOpen(true);
-                                                            }}>
-                                                                {t('bookNow')} <ArrowUpRight size={16} />
+                                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {serviceCategoryFilter ? (data?.serviceCategories?.find((c: any) => String(c.id) === String(serviceCategoryFilter))?.name || t('allCategories')) : t('allCategories')}
+                                                    </span>
+                                                    <ChevronDown size={20} style={{ transform: isServiceCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }} />
+                                                </button>
+
+                                                <AnimatePresence>
+                                                    {isServiceCategoryDropdownOpen && (
+                                                        <motion.div 
+                                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                            style={{ 
+                                                                position: 'absolute', 
+                                                                top: '75px', 
+                                                                right: 0, 
+                                                                width: '100%',
+                                                                minWidth: '240px',
+                                                                background: 'white', 
+                                                                borderRadius: '25px', 
+                                                                boxShadow: '0 15px 45px rgba(0,0,0,0.15)', 
+                                                                border: '1px solid rgba(223, 185, 109, 0.1)',
+                                                                padding: '12px',
+                                                                zIndex: 1000,
+                                                                maxHeight: '400px',
+                                                                overflowY: 'auto'
+                                                            }}
+                                                        >
+                                                            <button 
+                                                                onClick={() => {
+                                                                    setServiceCategoryFilter('');
+                                                                    setIsServiceCategoryDropdownOpen(false);
+                                                                }}
+                                                                style={{ 
+                                                                    width: '100%', 
+                                                                    padding: '12px 20px', 
+                                                                    borderRadius: '15px', 
+                                                                    border: 'none', 
+                                                                    background: !serviceCategoryFilter ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
+                                                                    color: !serviceCategoryFilter ? '#DFB96D' : '#1A0F0A',
+                                                                    textAlign: 'left',
+                                                                    fontSize: '0.9rem',
+                                                                    fontWeight: !serviceCategoryFilter ? '800' : '500',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s',
+                                                                    marginBottom: '4px'
+                                                                }}
+                                                            >
+                                                                {t('allCategories')}
                                                             </button>
-                                                        </div>
-                                                    </div>
-                                                </motion.div>
-                                            ))}
+                                                            {serviceCategories.map((cat: any) => (
+                                                                <button 
+                                                                    key={cat.id}
+                                                                    onClick={() => {
+                                                                        setServiceCategoryFilter(cat.id);
+                                                                        setIsServiceCategoryDropdownOpen(false);
+                                                                    }}
+                                                                    style={{ 
+                                                                        width: '100%', 
+                                                                        padding: '12px 20px', 
+                                                                        borderRadius: '15px', 
+                                                                        border: 'none', 
+                                                                        background: String(serviceCategoryFilter) === String(cat.id) ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
+                                                                        color: String(serviceCategoryFilter) === String(cat.id) ? '#DFB96D' : '#1A0F0A',
+                                                                        textAlign: 'left',
+                                                                        fontSize: '0.9rem',
+                                                                        fontWeight: String(serviceCategoryFilter) === String(cat.id) ? '800' : '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s',
+                                                                        marginBottom: '4px'
+                                                                    }}
+                                                                >
+                                                                    {cat.name}
+                                                                </button>
+                                                            ))}
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
                                         </div>
+
+                                        <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '40px' }}>
+                                            <button
+                                                onClick={() => setSelectedGender('homme')}
+                                                style={{
+                                                    padding: '12px 30px',
+                                                    borderRadius: '30px',
+                                                    border: selectedGender === 'homme' ? '2px solid #DFB96D' : '1px solid rgba(223, 185, 109, 0.3)',
+                                                    background: selectedGender === 'homme' ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
+                                                    color: selectedGender === 'homme' ? '#DFB96D' : '#9a8878',
+                                                    fontWeight: 'bold',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.3s ease',
+                                                    fontSize: '0.9rem',
+                                                    letterSpacing: '2px'
+                                                }}
+                                            >
+                                                {t('homme')}
+                                            </button>
+                                            <button
+                                                onClick={() => setSelectedGender('femme')}
+                                                style={{
+                                                    padding: '12px 30px',
+                                                    borderRadius: '30px',
+                                                    border: selectedGender === 'femme' ? '2px solid #DFB96D' : '1px solid rgba(223, 185, 109, 0.3)',
+                                                    background: selectedGender === 'femme' ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
+                                                    color: selectedGender === 'femme' ? '#DFB96D' : '#9a8878',
+                                                    fontWeight: 'bold',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.3s ease',
+                                                    fontSize: '0.9rem',
+                                                    letterSpacing: '2px'
+                                                }}
+                                            >
+                                                {t('femme')}
+                                            </button>
+                                        </div>
+
+                                        {(() => {
+                                            const baseFiltered = services.filter((s: any) => 
+                                                s.enabled !== false && 
+                                                ((s.visibility || 'both').toLowerCase() === 'both' || (s.visibility || '').toLowerCase() === (selectedGender || '').toLowerCase()) &&
+                                                s.name.toLowerCase().includes(serviceSearchTerm.toLowerCase()) &&
+                                                (!serviceCategoryFilter || String(s.categoryId) === String(serviceCategoryFilter))
+                                            );
+
+                                            const categoriesToShow = serviceCategories.map((cat: any) => ({
+                                                ...cat,
+                                                services: baseFiltered.filter((s: any) => String(s.categoryId) === String(cat.id))
+                                            })).filter(cat => cat.services.length > 0);
+
+                                            const uncategorized = baseFiltered.filter((s: any) => 
+                                                !s.categoryId || !serviceCategories.find((cat: any) => String(cat.id) === String(s.categoryId))
+                                            );
+
+                                            if (baseFiltered.length === 0) {
+                                                return (
+                                                    <div style={{ textAlign: 'center', padding: '60px', opacity: 0.5 }}>
+                                                        <p>Aucun service trouvé pour votre recherche.</p>
+                                                    </div>
+                                                );
+                                            }
+
+                                            return (
+                                                <>
+                                                    {categoriesToShow.map((cat: any) => (
+                                                        <div key={cat.id} style={{ marginBottom: '60px' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' }}>
+                                                                <h3 style={{ fontSize: '1.4rem', color: '#DFB96D', margin: 0, textTransform: 'uppercase', letterSpacing: '2px' }}>{cat.name}</h3>
+                                                                <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, rgba(223, 185, 109, 0.3) 0%, transparent 100%)' }} />
+                                                            </div>
+                                                            <div className={styles.servicesGrid}>
+                                                                {cat.services.map((service: any, idx: number) => (
+                                                                    <motion.div
+                                                                        key={service.id}
+                                                                        initial={{ opacity: 0, x: 50 }}
+                                                                        animate={{ opacity: 1, x: 0 }}
+                                                                        transition={{ delay: idx * 0.1 }}
+                                                                        className={styles.serviceCard}
+                                                                        onClick={() => router.push(`/services/${service.id}`)}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                    >
+                                                                        <div className={styles.serviceImgWrapper}>
+                                                                            {service.image ? (
+                                                                                <img src={service.image} alt={service.name} />
+                                                                            ) : (
+                                                                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #FDFCFB 0%, #E2D1C3 100%)' }}>
+                                                                                    <Sparkles size={48} color="rgba(223, 185, 109, 0.5)" />
+                                                                                </div>
+                                                                            )}
+                                                                            <div className={styles.servicePrice}>
+                                                                                {selectedGender === 'homme' ? (service.price_homme || service.price) : (service.price_femme || service.price)} DT
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className={styles.serviceInfo}>
+                                                                            <h3>{service.name}</h3>
+                                                                            <p>{service.description}</p>
+                                                                            <div className={styles.serviceFooter}>
+                                                                                <span className={styles.duration}><Clock size={14} /> {service.duration}</span>
+                                                                                <button className="btn-lux" onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setBookingService(service);
+                                                                                    setBookingDuration(parseDuration(service.duration));
+                                                                                    setIsBookingModalOpen(true);
+                                                                                }}>
+                                                                                    {t('bookNow')} <ArrowUpRight size={16} />
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </motion.div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+
+                                                    {uncategorized.length > 0 && (
+                                                        <div style={{ marginBottom: '60px' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' }}>
+                                                                <h3 style={{ fontSize: '1.4rem', color: '#9a8878', margin: 0, textTransform: 'uppercase', letterSpacing: '2px' }}>Sans catégorie</h3>
+                                                                <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, rgba(154, 136, 120, 0.3) 0%, transparent 100%)' }} />
+                                                            </div>
+                                                            <div className={styles.servicesGrid}>
+                                                                {uncategorized.map((service: any, idx: number) => (
+                                                                    <motion.div
+                                                                        key={service.id}
+                                                                        initial={{ opacity: 0, x: 50 }}
+                                                                        animate={{ opacity: 1, x: 0 }}
+                                                                        transition={{ delay: idx * 0.1 }}
+                                                                        className={styles.serviceCard}
+                                                                        onClick={() => router.push(`/services/${service.id}`)}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                    >
+                                                                        <div className={styles.serviceImgWrapper}>
+                                                                            {service.image ? (
+                                                                                <img src={service.image} alt={service.name} />
+                                                                            ) : (
+                                                                                <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #FDFCFB 0%, #E2D1C3 100%)' }}>
+                                                                                    <Sparkles size={48} color="rgba(223, 185, 109, 0.5)" />
+                                                                                </div>
+                                                                            )}
+                                                                            <div className={styles.servicePrice}>
+                                                                                {selectedGender === 'homme' ? (service.price_homme || service.price) : (service.price_femme || service.price)} DT
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className={styles.serviceInfo}>
+                                                                            <h3>{service.name}</h3>
+                                                                            <p>{service.description}</p>
+                                                                            <div className={styles.serviceFooter}>
+                                                                                <span className={styles.duration}><Clock size={14} /> {service.duration}</span>
+                                                                                <button className="btn-lux" onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setBookingService(service);
+                                                                                    setBookingDuration(parseDuration(service.duration));
+                                                                                    setIsBookingModalOpen(true);
+                                                                                }}>
+                                                                                    {t('bookNow')} <ArrowUpRight size={16} />
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    </motion.div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
                                     </section>
                                 )}
 
                                 {user?.role !== 'admin' && (
                                     <div className={styles.infoRow}>
                                         {/* Recommendations */}
-                                        <div className={styles.recSection}>
-                                            <h2 className={styles.subTitle}>{t('recommendations')}</h2>
-                                            <div className={styles.recsList}>
-                                                {recommendations.map((rec: any) => {
-                                                    const staff = prestataires.find((p: any) => p.id === rec.id);
-                                                    return (
-                                                        <motion.div
-                                                            key={rec.id}
-                                                            whileHover={{ x: 10 }}
-                                                            className={styles.recItem}
-                                                        >
-                                                            <img src={staff?.image} alt={staff?.name} />
-                                                            <div className={styles.recDetails}>
-                                                                <h4>{staff?.name}</h4>
-                                                                <p>{rec.reason}</p>
-                                                            </div>
-                                                            <button className={styles.recButton}>
-                                                                <Calendar size={18} />
-                                                            </button>
-                                                        </motion.div>
-                                                    );
-                                                })}
-                                            </div>
-                                        </div>
 
                                         {/* Referral Section */}
                                         <div className={styles.recSection} style={{ marginBottom: '20px' }}>
                                             <h2 className={styles.subTitle}>{t('referrals')}</h2>
                                             <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px' }}>
-                                                <p style={{ marginBottom: '10px' }}>{t('getRefCode')}</p>
-                                                <div style={{ display: 'flex', gap: '10px' }}>
-                                                    <input id="refInput" type="text" placeholder="CODE123" className={styles.modalTextarea} style={{ marginBottom: 0, height: '40px' }} />
-                                                    <button className="btn-lux" onClick={async () => {
-                                                        const code = (document.getElementById('refInput') as HTMLInputElement).value;
-                                                        if (code) {
-                                                            await applyReferral({ variables: { userId: user?.id, code } });
-                                                            swalLux('success', 'Code appliqué !');
-                                                        }
-                                                    }}>{t('apply')}</button>
+                                                <div style={{ marginBottom: '20px', borderBottom: '1px solid rgba(255,255,255,0.1)', paddingBottom: '15px' }}>
+                                                    <p style={{ marginBottom: '10px', fontSize: '0.85rem', color: '#9a8878' }}>Votre code de parrainage :</p>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                                        <span style={{
+                                                            fontSize: '1.2rem',
+                                                            fontWeight: 'bold',
+                                                            color: '#DFB96D',
+                                                            background: 'rgba(223, 185, 109, 0.1)',
+                                                            padding: '5px 15px',
+                                                            borderRadius: '5px',
+                                                            letterSpacing: '2px'
+                                                        }}>
+                                                            {data?.userLoyalty?.referral_code || '---'}
+                                                        </span>
+                                                        {!data?.userLoyalty?.referral_code && (
+                                                            <button className="btn-lux" style={{ fontSize: '0.7rem', padding: '5px 10px' }} onClick={async () => {
+                                                                await generateReferralCode({ variables: { userId: user?.id } });
+                                                            }}>Générer mon code</button>
+                                                        )}
+                                                        {data?.userLoyalty?.referral_code && (
+                                                            <button className="btn-lux" style={{ fontSize: '0.7rem', padding: '5px 10px' }} onClick={() => {
+                                                                navigator.clipboard.writeText(data.userLoyalty.referral_code || '');
+                                                                swalLux('success', 'Code copié !');
+                                                            }}>Copier</button>
+                                                        )}
+                                                    </div>
                                                 </div>
+
+                                                <p style={{ marginBottom: '10px', fontSize: '0.85rem', color: '#9a8878' }}>Avez-vous été parrainé ?</p>
+                                                {data?.userLoyalty?.referred_by ? (
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#DFB96D' }}>
+                                                        <UserCheck size={18} />
+                                                        <span>Parrainé par : <strong>{data.userLoyalty.referred_by.name}</strong></span>
+                                                    </div>
+                                                ) : (
+                                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                                        <input id="refInput" type="text" placeholder="Entrez le code" className={styles.modalTextarea} style={{ marginBottom: 0, height: '40px' }} />
+                                                        <button className="btn-lux" onClick={async () => {
+                                                            const code = (document.getElementById('refInput') as HTMLInputElement).value;
+                                                            if (code) {
+                                                                try {
+                                                                    await applyReferralCode({ variables: { userId: user?.id, code } });
+                                                                    swalLux('success', 'Code appliqué !');
+                                                                } catch (err: any) {
+                                                                    swalLux('error', err.message);
+                                                                }
+                                                            }
+                                                        }}>{t('apply')}</button>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
-                                        {/* Amenities Gallery */}
+                                        {/* Boisson au choix Gallery */}
                                         <div className={styles.amenitiesSection}>
-                                            <h2 className={styles.subTitle}>{t('luxuryAmenities')}</h2>
-                                            <div className={styles.amenitiesGrid}>
-                                                {amenities.map((amenity: any, idx: number) => (
+                                            <h2 className={styles.subTitle}>Boisson au choix</h2>
+                                            <div style={{
+                                                display: 'grid',
+                                                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                                                gap: '15px'
+                                            }}>
+                                                {(data?.allDrinks || []).map((drink: any) => (
                                                     <motion.div
-                                                        key={idx}
-                                                        whileHover={{ scale: 1.05 }}
-                                                        className={styles.amenityCard}
+                                                        key={drink.id}
+                                                        whileHover={{ scale: 1.02 }}
+                                                        onClick={async () => {
+                                                            const result = await swalLux('question', 'Êtes-vous sûr ?', `Voulez-vous enregistrer "${drink.name}" comme votre boisson préférée ?`, {
+                                                                showCancelButton: true,
+                                                                confirmButtonText: 'Sauvegarder',
+                                                                cancelButtonText: 'Annuler'
+                                                            });
+
+                                                            if (result.isConfirmed) {
+                                                                try {
+                                                                    await updateUser({
+                                                                        variables: {
+                                                                            userId: user?.id,
+                                                                            drink_pref: drink.name
+                                                                        }
+                                                                    });
+
+                                                                    // Also update current arrived reservation if any
+                                                                    const arrivedRes = data?.allReservations?.find((r: any) => r.user?.id === user?.id && r.status === 'arrived');
+                                                                    if (arrivedRes) {
+                                                                        await updateReservationDrink({
+                                                                            variables: { id: arrivedRes.id, drinkChoice: drink.name }
+                                                                        });
+                                                                    }
+
+                                                                    swalLux('success', 'Enregistré !', `"${drink.name}" est maintenant votre boisson préférée.`);
+                                                                } catch (error) {
+                                                                    swalLux('error', 'Erreur', 'Impossible de mettre à jour votre boisson préférée.');
+                                                                }
+                                                            }
+                                                        }}
+                                                        style={{
+                                                            position: 'relative',
+                                                            height: '150px',
+                                                            borderRadius: '15px',
+                                                            overflow: 'hidden',
+                                                            cursor: 'pointer',
+                                                            boxShadow: '0 10px 25px rgba(0,0,0,0.1)'
+                                                        }}
                                                     >
-                                                        <img src={amenity.image} alt={amenity.name} />
-                                                        <div className={styles.amenityLabel}>{amenity.name}</div>
+                                                        {drink.image ? (
+                                                            <img
+                                                                src={drink.image}
+                                                                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                                alt={drink.name}
+                                                            />
+                                                        ) : (
+                                                            <div style={{ width: '100%', height: '100%', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                <Coffee size={30} color="#DFB96D" />
+                                                            </div>
+                                                        )}
+                                                        <div style={{
+                                                            position: 'absolute',
+                                                            bottom: 0,
+                                                            left: 0,
+                                                            right: 0,
+                                                            padding: '12px',
+                                                            background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 100%)',
+                                                            color: 'white'
+                                                        }}>
+                                                            <h3 style={{ margin: 0, fontSize: '0.9rem', fontWeight: '800' }}>{drink.name}</h3>
+                                                        </div>
                                                     </motion.div>
                                                 ))}
                                             </div>
@@ -1535,62 +2214,214 @@ export default function Dashboard() {
                                 className={styles.tabContent}
                             >
                                 <section className={styles.section}>
-                                    <div className={styles.sectionHeader} style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                    <div className={styles.sectionHeader} style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '40px' }}>
                                         <h2>{t('manageServices')}</h2>
                                         <div className={styles.headerLine} style={{ width: '100px', margin: '15px auto' }} />
-                                        <button className="btn-lux" style={{ marginTop: '20px' }} onClick={() => setIsAddServiceModalOpen(true)}>{t('addService')}</button>
+                                        <div style={{ display: 'flex', gap: '15px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                            <button className="btn-lux" style={{ marginTop: '20px' }} onClick={() => setIsAddServiceModalOpen(true)}>{t('addService')}</button>
+                                            <button className="btn-lux" style={{ marginTop: '20px', background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)' }} onClick={() => setIsCategoryModalOpen(true)}>Gérer les catégories</button>
+                                        </div>
                                     </div>
-                                    <div className={styles.servicesGrid}>
-                                        {services.map((service: any) => (
-                                            <div key={service.id} className={styles.serviceCard} style={{ opacity: service.enabled === false ? 0.6 : 1 }}>
-                                                <div className={styles.serviceImgWrapper}>
-                                                    <img src={service.image} alt={service.name} />
-                                                    <div className={styles.servicePrice}>{service.price}</div>
-                                                    <div style={{ position: 'absolute', top: '25px', left: '25px' }}>
-                                                        <span className={`${styles.serviceStatus} ${service.enabled !== false ? styles.statusActive : styles.statusDisabled}`}>
-                                                            {service.enabled !== false ? t('active') : t('disabled')}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <div className={styles.serviceInfo}>
-                                                    <h3 style={{ textAlign: 'center', marginBottom: '15px' }}>{service.name}</h3>
-                                                    <p style={{ textAlign: 'center', minHeight: '60px' }}>{service.description}</p>
-                                                    <div className={styles.modalActions} style={{ marginTop: '15px', flexWrap: 'wrap' }}>
-                                                        <button
-                                                            className={styles.btnSaveLux}
-                                                            style={{ flex: '1 1 120px' }}
-                                                            onClick={() => {
-                                                                setEditingService(service);
-                                                                setIsEditServiceModalOpen(true);
-                                                            }}
-                                                        >
-                                                            {t('edit')}
-                                                        </button>
-                                                        <button
-                                                            className={styles.btnCancel}
-                                                            style={{ flex: '1 1 120px' }}
-                                                            onClick={async () => {
-                                                                await toggleService({ variables: { id: service.id, enabled: service.enabled === false } });
-                                                            }}
-                                                        >
-                                                            {service.enabled === false ? t('enable') : t('disable')}
-                                                        </button>
-                                                        <button
-                                                            className={styles.btnDeleteLux}
-                                                            style={{ flex: '1 1 100%' }}
-                                                            onClick={async () => {
-                                                                if (confirm(t('confirmDeleteService'))) {
-                                                                    await removeService({ variables: { id: service.id } });
-                                                                }
-                                                            }}
-                                                        >
-                                                            {t('remove')}
-                                                        </button>
-                                                    </div>
-                                                </div>
+
+                                    {/* Search and Filter UI */}
+                                    <div style={{ maxWidth: '900px', margin: '0 auto 40px', display: 'flex', gap: '20px', flexWrap: 'wrap', padding: '0 20px' }}>
+                                        <div style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
+                                            <div style={{ 
+                                                position: 'absolute', 
+                                                insetInlineStart: '25px', 
+                                                top: '50%', 
+                                                transform: 'translateY(-50%)', 
+                                                color: '#DFB96D', 
+                                                display: 'flex', 
+                                                alignItems: 'center',
+                                                pointerEvents: 'none',
+                                                zIndex: 1
+                                            }}>
+                                                <Search size={22} />
                                             </div>
-                                        ))}
+                                            <input 
+                                                type="text" 
+                                                placeholder={t('searchService')} 
+                                                value={serviceSearchTerm}
+                                                onChange={(e) => setServiceSearchTerm(e.target.value)}
+                                                style={{ 
+                                                    width: '100%', 
+                                                    paddingInlineStart: '65px',
+                                                    paddingInlineEnd: '25px',
+                                                    paddingTop: 0,
+                                                    paddingBottom: 0,
+                                                    borderRadius: '50px', 
+                                                    border: '1px solid rgba(223, 185, 109, 0.2)', 
+                                                    background: 'white', 
+                                                    color: '#1A0F0A', 
+                                                    outline: 'none',
+                                                    fontSize: '1rem',
+                                                    height: '60px',
+                                                    textAlign: 'start',
+                                                    boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
+                                                    transition: 'all 0.3s ease'
+                                                }} 
+                                            />
+                                        </div>
+                                        <div ref={categoryDropdownRef} style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
+                                            <button 
+                                                onClick={() => setIsServiceCategoryDropdownOpen(!isServiceCategoryDropdownOpen)}
+                                                style={{ 
+                                                    width: '100%',
+                                                    padding: '0 50px 0 30px', 
+                                                    borderRadius: '50px', 
+                                                    border: '1px solid rgba(223, 185, 109, 0.3)', 
+                                                    background: 'white', 
+                                                    color: '#DFB96D', 
+                                                    outline: 'none',
+                                                    cursor: 'pointer',
+                                                    height: '60px',
+                                                    fontSize: '0.95rem',
+                                                    fontWeight: '800',
+                                                    boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    transition: 'all 0.3s ease'
+                                                }}
+                                            >
+                                                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {serviceCategoryFilter ? serviceCategories.find((c: any) => String(c.id) === String(serviceCategoryFilter))?.name : 'Toutes les catégories'}
+                                                </span>
+                                                <ChevronDown size={20} style={{ transform: isServiceCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }} />
+                                            </button>
+
+                                            <AnimatePresence>
+                                                {isServiceCategoryDropdownOpen && (
+                                                    <motion.div 
+                                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        style={{ 
+                                                            position: 'absolute', 
+                                                            top: '75px', 
+                                                            right: 0, 
+                                                            width: '100%',
+                                                            minWidth: '240px',
+                                                            background: 'white', 
+                                                            borderRadius: '25px', 
+                                                            boxShadow: '0 15px 45px rgba(0,0,0,0.15)', 
+                                                            border: '1px solid rgba(223, 185, 109, 0.1)',
+                                                            padding: '12px',
+                                                            zIndex: 1000,
+                                                            maxHeight: '400px',
+                                                            overflowY: 'auto'
+                                                        }}
+                                                    >
+                                                        <button 
+                                                            onClick={() => {
+                                                                setServiceCategoryFilter('');
+                                                                setIsServiceCategoryDropdownOpen(false);
+                                                            }}
+                                                            style={{ 
+                                                                width: '100%', 
+                                                                padding: '12px 20px', 
+                                                                borderRadius: '15px', 
+                                                                border: 'none', 
+                                                                background: !serviceCategoryFilter ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
+                                                                color: !serviceCategoryFilter ? '#DFB96D' : '#1A0F0A',
+                                                                textAlign: 'left',
+                                                                fontSize: '0.9rem',
+                                                                fontWeight: !serviceCategoryFilter ? '800' : '500',
+                                                                cursor: 'pointer',
+                                                                transition: 'all 0.2s',
+                                                                marginBottom: '4px'
+                                                            }}
+                                                        >
+                                                            Toutes les catégories
+                                                        </button>
+                                                        {serviceCategories.map((cat: any) => (
+                                                            <button 
+                                                                key={cat.id}
+                                                                onClick={() => {
+                                                                    setServiceCategoryFilter(cat.id);
+                                                                    setIsServiceCategoryDropdownOpen(false);
+                                                                }}
+                                                                style={{ 
+                                                                    width: '100%', 
+                                                                    padding: '12px 20px', 
+                                                                    borderRadius: '15px', 
+                                                                    border: 'none', 
+                                                                    background: String(serviceCategoryFilter) === String(cat.id) ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
+                                                                    color: String(serviceCategoryFilter) === String(cat.id) ? '#DFB96D' : '#1A0F0A',
+                                                                    textAlign: 'left',
+                                                                    fontSize: '0.9rem',
+                                                                    fontWeight: String(serviceCategoryFilter) === String(cat.id) ? '800' : '500',
+                                                                    cursor: 'pointer',
+                                                                    transition: 'all 0.2s',
+                                                                    marginBottom: '4px'
+                                                                }}
+                                                            >
+                                                                {cat.name}
+                                                            </button>
+                                                        ))}
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
                                     </div>
+
+                                    {/* Grouped Services List */}
+                                    {(() => {
+                                        const filteredServices = services.filter((s: any) => 
+                                            s.name.toLowerCase().includes(serviceSearchTerm.toLowerCase()) &&
+                                            (!serviceCategoryFilter || String(s.categoryId) === String(serviceCategoryFilter))
+                                        );
+
+                                        const categoriesToShow = serviceCategories.map((cat: any) => ({
+                                            ...cat,
+                                            services: filteredServices.filter((s: any) => String(s.categoryId) === String(cat.id))
+                                        })).filter(cat => cat.services.length > 0);
+
+                                        const uncategorized = filteredServices.filter((s: any) => 
+                                            !s.categoryId || !serviceCategories.find((cat: any) => String(cat.id) === String(s.categoryId))
+                                        );
+
+                                        if (filteredServices.length === 0) {
+                                            return (
+                                                <div style={{ textAlign: 'center', padding: '60px', opacity: 0.5 }}>
+                                                    <p>Aucun service trouvé pour votre recherche.</p>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <>
+                                                {categoriesToShow.map((cat: any) => (
+                                                    <div key={cat.id} style={{ marginBottom: '60px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' }}>
+                                                            <h3 style={{ fontSize: '1.4rem', color: '#DFB96D', margin: 0, textTransform: 'uppercase', letterSpacing: '2px' }}>{cat.name}</h3>
+                                                            <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, rgba(223, 185, 109, 0.3) 0%, transparent 100%)' }} />
+                                                        </div>
+                                                        <div className={styles.servicesGrid}>
+                                                            {cat.services.map((service: any) => (
+                                                                <ServiceItem key={service.id} service={service} t={t} styles={styles} toggleService={toggleService} removeService={removeService} setEditingService={setEditingService} setIsEditServiceModalOpen={setIsEditServiceModalOpen} />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ))}
+
+                                                {uncategorized.length > 0 && (
+                                                    <div style={{ marginBottom: '60px' }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '20px', marginBottom: '30px' }}>
+                                                            <h3 style={{ fontSize: '1.4rem', color: '#9a8878', margin: 0, textTransform: 'uppercase', letterSpacing: '2px' }}>Sans catégorie</h3>
+                                                            <div style={{ flex: 1, height: '1px', background: 'linear-gradient(90deg, rgba(154, 136, 120, 0.3) 0%, transparent 100%)' }} />
+                                                        </div>
+                                                        <div className={styles.servicesGrid}>
+                                                            {uncategorized.map((service: any) => (
+                                                                <ServiceItem key={service.id} service={service} t={t} styles={styles} toggleService={toggleService} removeService={removeService} setEditingService={setEditingService} setIsEditServiceModalOpen={setIsEditServiceModalOpen} />
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </>
+                                        );
+                                    })()}
                                 </section>
                             </motion.div>
                         )}
@@ -1648,15 +2479,15 @@ export default function Dashboard() {
                                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                             <h3>{staff.name}</h3>
                                                             {user?.role === 'admin' && staff.calendar_color_id && (
-                                                                <div 
+                                                                <div
                                                                     title="Couleur Agenda"
-                                                                    style={{ 
-                                                                        width: '12px', 
-                                                                        height: '12px', 
-                                                                        borderRadius: '50%', 
+                                                                    style={{
+                                                                        width: '12px',
+                                                                        height: '12px',
+                                                                        borderRadius: '50%',
                                                                         background: getColorHex(staff.calendar_color_id),
                                                                         boxShadow: '0 0 5px rgba(0,0,0,0.2)'
-                                                                    }} 
+                                                                    }}
                                                                 />
                                                             )}
                                                         </div>
@@ -1696,7 +2527,7 @@ export default function Dashboard() {
                                                                             confirmButtonText: 'Oui, supprimer !',
                                                                             cancelButtonText: 'Annuler'
                                                                         });
- 
+
                                                                         if (result.isConfirmed) {
                                                                             try {
                                                                                 await deleteSpecialist({ variables: { id: staff.id } });
@@ -1730,7 +2561,7 @@ export default function Dashboard() {
                                 className={styles.tabContent}
                             >
                                 <div className={styles.sectionHeader}>
-                                    <h2>Toutes les Réservations</h2>
+                                    <h2>Prestations Exécutées</h2>
                                     <div className={styles.headerLine} />
                                 </div>
                                 <div className={styles.historyTimeline}>
@@ -1754,11 +2585,11 @@ export default function Dashboard() {
                                                     <div className={styles.timeMeta}>
                                                         <Calendar size={16} />
                                                         <span>{new Date(res.date).toLocaleDateString(language, { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
-                                                        <span style={{ 
-                                                            marginLeft: 'auto', 
-                                                            fontSize: '0.7rem', 
-                                                            fontWeight: 'bold', 
-                                                            padding: '2px 8px', 
+                                                        <span style={{
+                                                            marginLeft: 'auto',
+                                                            fontSize: '0.7rem',
+                                                            fontWeight: 'bold',
+                                                            padding: '2px 8px',
                                                             borderRadius: '10px',
                                                             background: res.status === 'confirmed' ? '#D1FAE5' : res.status === 'cancelled' ? '#FEE2E2' : res.status === 'paid' ? '#DFE8FF' : '#FEF3C7',
                                                             color: res.status === 'confirmed' ? '#065F46' : res.status === 'cancelled' ? '#991B1B' : res.status === 'paid' ? '#1E40AF' : '#92400E'
@@ -1793,29 +2624,187 @@ export default function Dashboard() {
                                     /* ── ADMIN: reservations in the current hour slot ── */
                                     const now = new Date();
                                     const slotStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), 0, 0, 0);
-                                    const slotEnd   = new Date(slotStart.getTime() + 60 * 60 * 1000);
+                                    const slotEnd = new Date(slotStart.getTime() + 60 * 60 * 1000);
                                     const slotLabel = `${slotStart.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })} – ${slotEnd.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}`;
 
                                     const parseDate = (raw: string) => new Date(raw.includes('-') || raw.includes('T') ? raw : parseInt(raw));
 
-                                    const slotRes = (data?.allReservations || []).filter((r: any) => {
+                                    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+                                    const endOfToday = startOfToday + 24 * 60 * 60 * 1000;
+
+                                    const earlyArrivedRes = (data?.allReservations || []).filter((r: any) => {
                                         try {
+                                            if (r.status !== 'arrived') return false;
                                             const d = parseDate(r.date).getTime();
-                                            return d >= slotStart.getTime() && d < slotEnd.getTime();
+                                            // Today, but AFTER the current slot ends (early for a future slot)
+                                            return d >= slotEnd.getTime() && d < endOfToday;
                                         } catch { return false; }
                                     }).sort((a: any, b: any) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
 
+                                     const slotRes = (data?.allReservations || []).filter((r: any) => {
+                                         try {
+                                             const d = parseDate(r.date).getTime();
+                                             return d >= slotStart.getTime() && d < slotEnd.getTime();
+                                         } catch { return false; }
+                                     }).sort((a: any, b: any) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+
                                     const statusMeta = (status: string) => {
                                         switch (status?.toLowerCase()) {
-                                            case 'confirmed': return { label: 'CONFIRMÉ',   bg: '#D1FAE5', color: '#065F46', dot: '#10B981' };
-                                            case 'cancelled': return { label: 'ANNULÉ',     bg: '#FEE2E2', color: '#991B1B', dot: '#EF4444' };
-                                            case 'arrived':   return { label: 'ARRIVÉ',     bg: '#DBEAFE', color: '#1E40AF', dot: '#3B82F6' };
-                                            default:          return { label: 'EN ATTENTE', bg: '#FEF3C7', color: '#92400E', dot: '#F59E0B' };
+                                            case 'confirmed': return { label: 'CONFIRMÉ', bg: '#D1FAE5', color: '#065F46', dot: '#10B981' };
+                                            case 'cancelled': return { label: 'ANNULÉ', bg: '#FEE2E2', color: '#991B1B', dot: '#EF4444' };
+                                            case 'arrived': return { label: 'ARRIVÉ', bg: '#DBEAFE', color: '#1E40AF', dot: '#3B82F6' };
+                                            default: return { label: 'EN ATTENTE', bg: '#FEF3C7', color: '#92400E', dot: '#F59E0B' };
                                         }
+                                    };
+
+                                    const ReservationCard = ({ r, idx, isEarly = false }: { r: any, idx: number, isEarly?: boolean }) => {
+                                        const meta = statusMeta(r.status);
+                                        const rDate = parseDate(r.date);
+                                        return (
+                                            <motion.div
+                                                key={r.id}
+                                                initial={{ opacity: 0, y: 16 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: idx * 0.06 }}
+                                                style={{
+                                                    background: r.status === 'arrived'
+                                                        ? 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)'
+                                                        : 'linear-gradient(135deg, #FFFDF9 0%, #FDF6E8 100%)',
+                                                    border: r.status === 'arrived'
+                                                        ? '1px solid rgba(59,130,246,0.35)'
+                                                        : '1px solid rgba(223,185,109,0.22)',
+                                                    borderRadius: '18px',
+                                                    overflow: 'hidden',
+                                                    boxShadow: r.status === 'arrived'
+                                                        ? '0 4px 20px rgba(59,130,246,0.12)'
+                                                        : '0 4px 20px rgba(0,0,0,0.05)',
+                                                    position: 'relative',
+                                                }}
+                                            >
+                                                {/* Left accent bar — blue for arrived, gold otherwise */}
+                                                <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: r.status === 'arrived' ? '#3B82F6' : '#DFB96D' }} />
+
+                                                <div style={{ padding: '16px 16px 16px 20px' }}>
+                                                    {/* Row 1: time + service name + status */}
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', marginBottom: '14px' }}>
+                                                            {/* Row 1: Time & Status */}
+                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                    <Clock size={14} color="#DFB96D" />
+                                                                    <span style={{ fontSize: '1.1rem', fontWeight: '900', fontFamily: 'monospace', color: '#DFB96D', letterSpacing: '0.5px' }}>
+                                                                        {rDate.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
+                                                                    </span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: meta.bg, color: meta.color, borderRadius: '20px', padding: '4px 10px', fontSize: '0.68rem', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
+                                                                    {meta.label}
+                                                                </div>
+                                                            </div>
+
+                                                            {/* Row 2: Service Name & Badges */}
+                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                                <span style={{ fontSize: '1.05rem', fontWeight: '800', color: '#1A0F0A', lineHeight: 1.2 }}>
+                                                                    {r.service?.name}
+                                                                </span>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                                    {(r.genre || r.service?.visibility) && (
+                                                                        <span style={{ 
+                                                                            fontSize: '0.62rem', 
+                                                                            padding: '2px 8px', 
+                                                                            borderRadius: '6px', 
+                                                                            background: (r.genre === 'homme' || (!r.genre && r.service?.visibility === 'homme')) ? '#EFF6FF' : (r.genre === 'femme' || (!r.genre && r.service?.visibility === 'femme')) ? '#FFF1F2' : '#F3F4F6',
+                                                                            color: (r.genre === 'homme' || (!r.genre && r.service?.visibility === 'homme')) ? '#2563EB' : (r.genre === 'femme' || (!r.genre && r.service?.visibility === 'femme')) ? '#E11D48' : '#4B5563',
+                                                                            border: `1px solid ${(r.genre === 'homme' || (!r.genre && r.service?.visibility === 'homme')) ? '#DBEAFE' : (r.genre === 'femme' || (!r.genre && r.service?.visibility === 'femme')) ? '#FFE4E6' : '#E5E7EB'}`,
+                                                                            fontWeight: '900',
+                                                                            textTransform: 'uppercase'
+                                                                        }}>
+                                                                            {r.genre || (r.service?.visibility === 'both' ? 'Mixte' : r.service?.visibility)}
+                                                                        </span>
+                                                                    )}
+                                                                    {isEarly && (
+                                                                        <span style={{ fontSize: '0.6rem', padding: '2px 8px', borderRadius: '50px', background: 'rgba(59,130,246,0.1)', color: '#3B82F6', border: '1px solid rgba(59,130,246,0.2)', fontWeight: '900', textTransform: 'uppercase' }}>EN AVANCE</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                    {/* Row 2: avatar + client · specialist · duration */}
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                        {r.prestataire?.image ? (
+                                                            <img src={r.prestataire.image} style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1.5px solid #DFB96D', flexShrink: 0, objectFit: 'cover' }} />
+                                                        ) : (
+                                                            <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1.5px solid rgba(223,185,109,0.4)', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                                <UserCheck color="#DFB96D" size={16} />
+                                                            </div>
+                                                        )}
+                                                        <div style={{ flex: 1, minWidth: 0 }}>
+                                                            <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#2A211C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                {r.user?.name || 'Client'}
+                                                                {(r.drink_choice || r.user?.drink_pref) && (
+                                                                    <span style={{ 
+                                                                        background: r.drink_choice ? 'linear-gradient(135deg, #DFB96D 0%, #C9973A 100%)' : 'rgba(223, 185, 109, 0.1)', 
+                                                                        color: r.drink_choice ? '#1A0F0A' : '#DFB96D', 
+                                                                        fontSize: '0.65rem', 
+                                                                        padding: '3px 10px', 
+                                                                        borderRadius: '6px', 
+                                                                        fontWeight: '900',
+                                                                        border: r.drink_choice ? 'none' : '1px solid rgba(223, 185, 109, 0.3)',
+                                                                        boxShadow: r.drink_choice ? '0 2px 4px rgba(201, 151, 58, 0.2)' : 'none',
+                                                                        display: 'flex',
+                                                                        alignItems: 'center',
+                                                                        gap: '4px',
+                                                                        textTransform: 'uppercase'
+                                                                    }}>
+                                                                        <Coffee size={10} /> {r.drink_choice || `Préféré: ${r.user?.drink_pref}`}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'nowrap', overflow: 'hidden' }}>
+                                                                {r.prestataire?.name && (
+                                                                    <span style={{ fontSize: '0.78rem', color: '#73685F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.prestataire.name}</span>
+                                                                )}
+                                                                {r.service?.duration && (
+                                                                    <>
+                                                                        <span style={{ color: '#DFB96D', fontSize: '0.65rem', flexShrink: 0 }}>•</span>
+                                                                        <span style={{ fontSize: '0.75rem', color: '#9a8878', flexShrink: 0 }}>{r.service.duration}</span>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        );
                                     };
 
                                     return (
                                         <>
+                                            {/* Early Arrivals Section */}
+                                            {earlyArrivedRes.length > 0 && (
+                                                <div style={{ marginBottom: '30px' }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
+                                                        <div style={{ 
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+                                                            width: '32px', height: '32px', borderRadius: '10px', 
+                                                            background: 'rgba(59,130,246,0.1)', color: '#3B82F6' 
+                                                        }}>
+                                                            <UserCheck size={18} />
+                                                        </div>
+                                                        <div>
+                                                            <h3 style={{ fontSize: '0.85rem', fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1.5px', color: '#3B82F6', margin: 0 }}>
+                                                                Clients déjà au salon
+                                                            </h3>
+                                                            <p style={{ margin: 0, fontSize: '0.7rem', color: '#73685F', fontWeight: '600' }}>Arrivées anticipées pour la suite de la journée</p>
+                                                        </div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                                                        {earlyArrivedRes.map((r: any, idx: number) => (
+                                                            <ReservationCard key={r.id} r={r} idx={idx} isEarly={true} />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             {/* Live clock header */}
                                             <div style={{ background: 'linear-gradient(135deg, #1A0F0A 0%, #2D1A0E 100%)', borderRadius: '20px', padding: '20px', marginBottom: '20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                                                 <div>
@@ -1844,78 +2833,9 @@ export default function Dashboard() {
                                                         {slotRes.length} réservation{slotRes.length > 1 ? 's' : ''} dans ce créneau
                                                     </div>
                                                     <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                                                        {slotRes.map((r: any, idx: number) => {
-                                                            const meta = statusMeta(r.status);
-                                                            const rDate = parseDate(r.date);
-                                                            return (
-                                                                <motion.div
-                                                                    key={r.id}
-                                                                    initial={{ opacity: 0, y: 16 }}
-                                                                    animate={{ opacity: 1, y: 0 }}
-                                                                    transition={{ delay: idx * 0.06 }}
-                                                                    style={{
-                                                                        background: r.status === 'arrived'
-                                                                            ? 'linear-gradient(135deg, #EFF6FF 0%, #DBEAFE 100%)'
-                                                                            : 'linear-gradient(135deg, #FFFDF9 0%, #FDF6E8 100%)',
-                                                                        border: r.status === 'arrived'
-                                                                            ? '1px solid rgba(59,130,246,0.35)'
-                                                                            : '1px solid rgba(223,185,109,0.22)',
-                                                                        borderRadius: '18px',
-                                                                        overflow: 'hidden',
-                                                                        boxShadow: r.status === 'arrived'
-                                                                            ? '0 4px 20px rgba(59,130,246,0.12)'
-                                                                            : '0 4px 20px rgba(0,0,0,0.05)',
-                                                                        position: 'relative',
-                                                                    }}
-                                                                >
-                                                                    {/* Left accent bar — blue for arrived, gold otherwise */}
-                                                                    <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '4px', background: r.status === 'arrived' ? '#3B82F6' : '#DFB96D' }} />
-
-                                                                    <div style={{ padding: '16px 16px 16px 20px' }}>
-                                                                        {/* Row 1: time + service name + status */}
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
-                                                                            <span style={{ fontSize: '1.05rem', fontWeight: '800', fontFamily: 'monospace', color: '#DFB96D', flexShrink: 0 }}>
-                                                                                {rDate.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
-                                                                            </span>
-                                                                            <span style={{ flex: 1, fontSize: '0.95rem', fontWeight: '700', color: '#1A0F0A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                                                {r.service?.name}
-                                                                            </span>
-                                                                            <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: '5px', background: meta.bg, color: meta.color, borderRadius: '20px', padding: '4px 10px', fontSize: '0.68rem', fontWeight: '800', letterSpacing: '0.5px' }}>
-                                                                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
-                                                                                {meta.label}
-                                                                            </div>
-                                                                        </div>
-
-                                                                        {/* Row 2: avatar + client · specialist · duration */}
-                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                                            {r.prestataire?.image ? (
-                                                                                <img src={r.prestataire.image} style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1.5px solid #DFB96D', flexShrink: 0, objectFit: 'cover' }} />
-                                                                            ) : (
-                                                                                <div style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1.5px solid rgba(223,185,109,0.4)', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                                                                    <UserCheck color="#DFB96D" size={16} />
-                                                                                </div>
-                                                                            )}
-                                                                            <div style={{ flex: 1, minWidth: 0 }}>
-                                                                                <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#2A211C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                                                    {r.user?.name || 'Client'}
-                                                                                </div>
-                                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '2px', flexWrap: 'nowrap', overflow: 'hidden' }}>
-                                                                                    {r.prestataire?.name && (
-                                                                                        <span style={{ fontSize: '0.78rem', color: '#73685F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.prestataire.name}</span>
-                                                                                    )}
-                                                                                    {r.service?.duration && (
-                                                                                        <>
-                                                                                            <span style={{ color: '#DFB96D', fontSize: '0.65rem', flexShrink: 0 }}>•</span>
-                                                                                            <span style={{ fontSize: '0.75rem', color: '#9a8878', flexShrink: 0 }}>{r.service.duration}</span>
-                                                                                        </>
-                                                                                    )}
-                                                                                </div>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                </motion.div>
-                                                            );
-                                                        })}
+                                                        {slotRes.map((r: any, idx: number) => (
+                                                            <ReservationCard key={r.id} r={r} idx={idx} />
+                                                        ))}
                                                     </div>
                                                 </>
                                             ) : (
@@ -2015,6 +2935,20 @@ export default function Dashboard() {
                                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#DBEAFE', color: '#1E40AF', borderRadius: '50px', padding: '14px 32px', fontWeight: '800', fontSize: '0.9rem', letterSpacing: '1px' }}>
                                                                     <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#3B82F6' }} />
                                                                     VOUS ÊTES SIGNALÉ(E) ARRIVÉ(E)
+                                                                    {r.drink_choice && (
+                                                                        <span style={{ 
+                                                                            marginLeft: '15px', 
+                                                                            background: 'rgba(30, 64, 175, 0.1)', 
+                                                                            padding: '4px 12px', 
+                                                                            borderRadius: '10px', 
+                                                                            fontSize: '0.8rem',
+                                                                            display: 'flex',
+                                                                            alignItems: 'center',
+                                                                            gap: '6px'
+                                                                        }}>
+                                                                            <Coffee size={14} /> {r.drink_choice}
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                             ) : (
                                                                 <button
@@ -2035,10 +2969,115 @@ export default function Dashboard() {
                                                                         });
                                                                         if (result.isConfirmed) {
                                                                             try {
+                                                                                // Second step: drink selection
+                                                                                const drinksHtml = (data?.allDrinks || []).map((d: any) => `
+                                                                                    <div class="drink-option" data-name="${d.name}" style="
+                                                                                        display: flex; 
+                                                                                        flex-direction: column; 
+                                                                                        align-items: center; 
+                                                                                        cursor: pointer; 
+                                                                                        padding: 12px; 
+                                                                                        border-radius: 20px; 
+                                                                                        border: 2px solid transparent; 
+                                                                                        background: white; 
+                                                                                        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                                                                                        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+                                                                                    ">
+                                                                                        <div style="width: 100%; aspect-ratio: 1/1; border-radius: 15px; overflow: hidden; margin-bottom: 10px;">
+                                                                                            <img src="${d.image || ''}" style="width: 100%; height: 100%; object-fit: cover;" />
+                                                                                        </div>
+                                                                                        <span style="font-weight: 800; font-size: 0.8rem; color: #433422; text-align: center; line-height: 1.2;">${d.name}</span>
+                                                                                    </div>
+                                                                                `).join('');
+
+                                                                                const clientProfile = data?.clients?.find((c: any) => c.id === user?.id);
+                                                                                const favoriteDrink = clientProfile?.drink_pref;
+
+                                                                                const { value: drinkChoice } = await Swal.fire({
+                                                                                    title: 'Votre Rafraîchissement',
+                                                                                    text: 'Choisissez votre boisson si vous le désirez…',
+                                                                                    html: `
+                                                                                        ${favoriteDrink ? `
+                                                                                            <div id="favorite-drink-btn" class="drink-option selected-drink" data-name="${favoriteDrink}" style="
+                                                                                                display: flex; 
+                                                                                                align-items: center; 
+                                                                                                gap: 15px; 
+                                                                                                padding: 15px; 
+                                                                                                border-radius: 20px; 
+                                                                                                border: 2px solid #DFB96D; 
+                                                                                                background: rgba(223, 185, 109, 0.05); 
+                                                                                                margin-bottom: 20px; 
+                                                                                                cursor: pointer;
+                                                                                                transition: all 0.3s ease;
+                                                                                            ">
+                                                                                                <div style="font-size: 1.5rem;">🌟</div>
+                                                                                                <div style="text-align: left;">
+                                                                                                    <div style="font-size: 0.7rem; color: #9a8878; text-transform: uppercase; letter-spacing: 1px;">Ma boisson préférée</div>
+                                                                                                    <div style="font-weight: 800; color: #1A0F0A;">${favoriteDrink}</div>
+                                                                                                </div>
+                                                                                            </div>
+                                                                                        ` : ''}
+                                                                                        <div style="
+                                                                                            display: grid; 
+                                                                                            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); 
+                                                                                            gap: 12px; 
+                                                                                            max-height: 400px;
+                                                                                            overflow-y: auto;
+                                                                                            padding: 5px;
+                                                                                        " id="drinks-grid">
+                                                                                            ${drinksHtml}
+                                                                                        </div>
+                                                                                    `,
+                                                                                    showCancelButton: true,
+                                                                                    cancelButtonText: 'Non, merci',
+                                                                                    confirmButtonText: 'Confirmer mon choix',
+                                                                                    confirmButtonColor: '#DFB96D',
+                                                                                    background: '#F8F5F0',
+                                                                                    color: '#433422',
+                                                                                    customClass: {
+                                                                                        container: 'modern-swal-container',
+                                                                                        popup: 'modern-swal-popup'
+                                                                                    },
+                                                                                    didOpen: () => {
+                                                                                        const options = document.querySelectorAll('.drink-option');
+                                                                                        options.forEach(opt => {
+                                                                                            opt.addEventListener('click', () => {
+                                                                                                options.forEach(o => {
+                                                                                                    o.classList.remove('selected-drink');
+                                                                                                    (o as HTMLElement).style.borderColor = 'transparent';
+                                                                                                    (o as HTMLElement).style.transform = 'scale(1)';
+                                                                                                    (o as HTMLElement).style.boxShadow = '0 4px 15px rgba(0,0,0,0.05)';
+                                                                                                    (o as HTMLElement).style.background = (o as HTMLElement).id === 'favorite-drink-btn' ? 'rgba(223, 185, 109, 0.05)' : 'white';
+                                                                                                });
+                                                                                                opt.classList.add('selected-drink');
+                                                                                                (opt as HTMLElement).style.borderColor = '#DFB96D';
+                                                                                                (opt as HTMLElement).style.transform = 'scale(1.05)';
+                                                                                                (opt as HTMLElement).style.boxShadow = '0 8px 25px rgba(223, 185, 109, 0.2)';
+                                                                                                (opt as HTMLElement).style.background = 'rgba(223, 185, 109, 0.1)';
+                                                                                            });
+                                                                                        });
+                                                                                    },
+                                                                                    preConfirm: () => {
+                                                                                        const selected = document.querySelector('.drink-option.selected-drink');
+                                                                                        return selected ? (selected as HTMLElement).dataset.name : null;
+                                                                                    }
+                                                                                });
+
                                                                                 await updateReservationStatus({ variables: { id: r.id, status: 'arrived' } });
+                                                                                if (drinkChoice) {
+                                                                                    await updateReservationDrink({ variables: { id: r.id, drinkChoice } });
+                                                                                    // Also update user's favorite drink
+                                                                                    await updateUser({
+                                                                                        variables: {
+                                                                                            userId: user?.id,
+                                                                                            drink_pref: drinkChoice
+                                                                                        }
+                                                                                    });
+                                                                                }
+
                                                                                 Swal.fire({
                                                                                     title: 'Bienvenue ! 🌿',
-                                                                                    text: "Votre arrivée a été signalée. L'équipe Vendôme vous accueille.",
+                                                                                    text: `Votre arrivée a été signalée${drinkChoice ? ` avec un(e) ${drinkChoice}` : ''}. L'équipe Vendôme vous accueille.`,
                                                                                     icon: 'success',
                                                                                     confirmButtonColor: '#DFB96D',
                                                                                     background: '#F8F5F0',
@@ -2076,9 +3115,9 @@ export default function Dashboard() {
                                     return (
                                         <div className={styles.card} style={{ textAlign: 'center', padding: '100px 20px' }}>
                                             <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🗓️</div>
-                                            <h3 style={{ fontSize: '1.8rem' }}>Aucune séance prévue aujourd'hui</h3>
-                                            <p style={{ color: '#888', maxWidth: '400px', margin: '20px auto' }}>Vous n'avez pas de rendez-vous pour cette journée. Envie d'une pause bien-être ?</p>
-                                            <button className="btn-lux" onClick={() => setActiveTab('services')}>RÉSERVER UNE SÉANCE</button>
+                                            <h3 style={{ fontSize: '1.8rem' }}>{t('noSessionsToday')}</h3>
+                                            <p style={{ color: '#888', maxWidth: '400px', margin: '20px auto' }}>{t('noAppointmentsDesc')}</p>
+                                            <button className="btn-lux" onClick={() => window.location.reload()}>{t('bookASession')}</button>
                                         </div>
                                     );
                                 })()}
@@ -2179,6 +3218,7 @@ export default function Dashboard() {
                                     updateUser={updateUser}
                                     handleFileUpload={handleFileUpload}
                                     isUploading={isUploading}
+                                    allDrinks={data?.allDrinks || []}
                                     t={t}
                                     styles={styles}
                                 />
@@ -2206,133 +3246,272 @@ export default function Dashboard() {
                                 className={styles.tabContent}
                             >
                                 <section className={styles.section}>
-                                    <div className={`${styles.sectionHeader} ${styles.clientsPageHeader} clients-page-header`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                        <div>
+                                    <div className={`${styles.sectionHeader} ${styles.clientsPageHeader} clients-page-header`} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '20px', marginBottom: '30px' }}>
+                                        <div style={{ textAlign: 'center' }}>
                                             <h2>{t('clients')}</h2>
-                                            <div className={styles.headerLine} />
+                                            <div className={styles.headerLine} style={{ margin: '15px auto' }} />
                                         </div>
-                                        <button className="btn-lux" onClick={() => setIsAddClientModalOpen(true)}>
+                                        <button className="btn-lux" style={{ minWidth: '200px' }} onClick={() => setIsAddClientModalOpen(true)}>
                                             <Plus size={18} /> {t('addClient') || 'Ajouter Client'}
                                         </button>
+                                        {/* Search and Filter UI for Clients */}
+                                        <div style={{ maxWidth: '900px', width: '100%', margin: '0 auto 40px', display: 'flex', gap: '20px', flexWrap: 'wrap', padding: '0 20px' }}>
+                                            <div style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
+                                                <div style={{ 
+                                                    position: 'absolute', 
+                                                    insetInlineStart: '25px', 
+                                                    top: '50%', 
+                                                    transform: 'translateY(-50%)', 
+                                                    color: '#DFB96D', 
+                                                    display: 'flex', 
+                                                    alignItems: 'center',
+                                                    pointerEvents: 'none'
+                                                }}>
+                                                    <Search size={22} />
+                                                </div>
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="Rechercher par nom, email ou téléphone..." 
+                                                        value={clientSearch}
+                                                        onChange={(e) => setClientSearch(e.target.value)}
+                                                        style={{ 
+                                                            width: '100%', 
+                                                            padding: '0 25px 0 65px', 
+                                                            borderRadius: '50px', 
+                                                            border: '1px solid rgba(223, 185, 109, 0.2)', 
+                                                            background: 'white', 
+                                                            color: '#1A0F0A', 
+                                                            outline: 'none',
+                                                            fontSize: '1rem',
+                                                            height: '60px',
+                                                            boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
+                                                            transition: 'all 0.3s ease'
+                                                        }} 
+                                                    />
+                                            </div>
+                                            <div ref={clientTierDropdownRef} style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
+                                                <button 
+                                                    onClick={() => setIsClientTierDropdownOpen(!isClientTierDropdownOpen)}
+                                                    style={{ 
+                                                        width: '100%',
+                                                        padding: '0 50px 0 30px', 
+                                                        borderRadius: '50px', 
+                                                        border: '1px solid rgba(223, 185, 109, 0.3)', 
+                                                        background: 'white', 
+                                                        color: '#DFB96D', 
+                                                        outline: 'none',
+                                                        cursor: 'pointer',
+                                                        height: '60px',
+                                                        fontSize: '0.95rem',
+                                                        fontWeight: '800',
+                                                        boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'space-between',
+                                                        transition: 'all 0.3s ease'
+                                                    }}
+                                                >
+                                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                        {clientTierFilter || 'Tous les rangs'}
+                                                    </span>
+                                                    <ChevronDown size={20} style={{ transform: isClientTierDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }} />
+                                                </button>
+
+                                                <AnimatePresence>
+                                                    {isClientTierDropdownOpen && (
+                                                        <motion.div 
+                                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                            style={{ 
+                                                                position: 'absolute', 
+                                                                top: '75px', 
+                                                                right: 0, 
+                                                                width: '100%',
+                                                                minWidth: '220px',
+                                                                background: 'white', 
+                                                                borderRadius: '25px', 
+                                                                boxShadow: '0 15px 45px rgba(0,0,0,0.15)', 
+                                                                border: '1px solid rgba(223, 185, 109, 0.1)',
+                                                                padding: '12px',
+                                                                zIndex: 1000,
+                                                            }}
+                                                        >
+                                                            {['', 'Normal', 'Membre Gold'].map((tier) => (
+                                                                <button 
+                                                                    key={tier}
+                                                                    onClick={() => {
+                                                                        setClientTierFilter(tier);
+                                                                        setIsClientTierDropdownOpen(false);
+                                                                    }}
+                                                                    style={{ 
+                                                                        width: '100%', 
+                                                                        padding: '12px 20px', 
+                                                                        borderRadius: '15px', 
+                                                                        border: 'none', 
+                                                                        background: clientTierFilter === tier ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
+                                                                        color: clientTierFilter === tier ? '#DFB96D' : '#1A0F0A',
+                                                                        textAlign: 'left',
+                                                                        fontSize: '0.9rem',
+                                                                        fontWeight: clientTierFilter === tier ? '800' : '500',
+                                                                        cursor: 'pointer',
+                                                                        transition: 'all 0.2s',
+                                                                        marginBottom: '4px'
+                                                                    }}
+                                                                >
+                                                                    {tier || 'Tous les rangs'}
+                                                                </button>
+                                                            ))}
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className={styles.clientsList}>
                                         {data?.clients && data.clients.length > 0 ? (
-                                            data.clients.map((client: any) => (
-                                                <div
-                                                    key={client.id}
-                                                    className={`${styles.clientCard} ${client.tier === 'Membre Gold' ? styles.clientCardGold : ''} ${client.is_blocked ? styles.clientCardBlocked : ''}`}
-                                                >
-                                                    <div className={styles.clientCardTop}>
-                                                        <div className={styles.clientIcon} style={{ overflow: 'hidden', width: '45px', height: '45px', border: '1px solid rgba(223, 185, 109, 0.2)' }}>
-                                                            {client.image ? (
-                                                                <img src={client.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                                            ) : (
-                                                                <Users size={20} />
-                                                            )}
+                                            data.clients
+                                                .filter((c: any) => 
+                                                    (c.name.toLowerCase().includes(clientSearch.toLowerCase()) || 
+                                                    c.email.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                                                    (c.phone && c.phone.includes(clientSearch))) &&
+                                                    (!clientTierFilter || c.tier === clientTierFilter)
+                                                )
+                                                .map((client: any) => (
+                                                    <div
+                                                        key={client.id}
+                                                        className={`${styles.clientCard} ${client.tier === 'Membre Gold' ? styles.clientCardGold : ''} ${client.is_blocked ? styles.clientCardBlocked : ''}`}
+                                                    >
+                                                        <div className={styles.clientCardTop}>
+                                                            <div className={styles.clientIcon} style={{ overflow: 'hidden', width: '45px', height: '45px', border: '1px solid rgba(223, 185, 109, 0.2)' }}>
+                                                                {client.image ? (
+                                                                    <img src={client.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                                                ) : (
+                                                                    <Users size={20} />
+                                                                )}
+                                                            </div>
+                                                            <div className={styles.clientInfo}>
+                                                                <h4
+                                                                    style={{ cursor: 'pointer' }}
+                                                                    onClick={() => {
+                                                                        setSelectedClientForFiche({ ...client });
+                                                                        setIsFicheModalOpen(true);
+                                                                    }}
+                                                                >
+                                                                    {client.name}
+                                                                    {client.tier === 'Membre Gold' && (
+                                                                        <span className={styles.goldBadge}><Star size={9} /> GOLD</span>
+                                                                    )}
+                                                                </h4>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                                                                    <p style={{ margin: 0 }}>{client.email}</p>
+                                                                    {client.phone && (
+                                                                        <p style={{ margin: 0, fontSize: '0.8rem', color: '#73685F', fontWeight: '500' }}>{client.phone}</p>
+                                                                    )}
+                                                                    {client.referred_by && (
+                                                                        <p style={{ margin: 0, fontSize: '0.75rem', color: '#DFB96D', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                                                            <UserCheck size={12} /> Parrainé par: <strong>{client.referred_by.name}</strong>
+                                                                        </p>
+                                                                    )}
+                                                                    {client.referral_code && (
+                                                                        <p style={{ margin: 0, fontSize: '0.7rem', color: '#9a8878' }}>
+                                                                            Code: <span style={{ color: '#DFB96D' }}>{client.referral_code}</span>
+                                                                        </p>
+                                                                    )}
+                                                                    <p style={{ margin: '5px 0 0 0', fontSize: '0.85rem', color: '#DFB96D', display: 'flex', alignItems: 'center', gap: '5px', fontWeight: '500' }}>
+                                                                        <Award size={14} /> Solde: <strong>{client.points || 0} pts</strong>
+                                                                    </p>
+                                                                </div>
+                                                                <div className={styles.clientPasswordRow}>
+                                                                    <span className={styles.clientPasswordLabel}>MDP:</span>
+                                                                    <span
+                                                                        className={styles.clientPasswordValue}
+                                                                        style={{ cursor: 'pointer' }}
+                                                                        title="Cliquer pour copier"
+                                                                        onClick={() => {
+                                                                            if (client.password) {
+                                                                                navigator.clipboard.writeText(client.password);
+                                                                                Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Mot de passe copié !', showConfirmButton: false, timer: 1500, timerProgressBar: true });
+                                                                            }
+                                                                        }}
+                                                                    >
+                                                                        {visiblePasswordId === client.id ? (client.password || '—') : '••••••••'}
+                                                                    </span>
+                                                                    <button
+                                                                        className={styles.clientPasswordToggle}
+                                                                        onClick={() => setVisiblePasswordId(visiblePasswordId === client.id ? null : client.id)}
+                                                                        title={visiblePasswordId === client.id ? 'Masquer' : 'Afficher'}
+                                                                    >
+                                                                        {visiblePasswordId === client.id ? <EyeOff size={13} /> : <Eye size={13} />}
+                                                                    </button>
+                                                                </div>
+                                                            </div>
                                                         </div>
-                                                        <div className={styles.clientInfo}>
-                                                            <h4
-                                                                style={{ cursor: 'pointer' }}
+                                                        <div className={styles.clientCardActions} style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+
+                                                            <button
+                                                                className={styles.btnSaveLux}
+                                                                style={{
+                                                                    padding: '8px 20px',
+                                                                    fontSize: '0.75rem',
+                                                                    minWidth: '120px',
+                                                                    background: 'rgba(223, 185, 109, 0.1)',
+                                                                    color: 'var(--accent)',
+                                                                    border: '1px solid rgba(223, 185, 109, 0.3)',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    gap: '8px'
+                                                                }}
+                                                                onClick={() => {
+                                                                    setInitialChatUserForInbox({
+                                                                        id: Number(client.id),
+                                                                        name: client.name,
+                                                                        email: client.email,
+                                                                        image: client.image,
+                                                                        tier: client.tier
+                                                                    });
+                                                                    setIsAdminInboxOpen(true);
+                                                                }}
+                                                            >
+                                                                <MessageSquare size={14} />
+                                                                MESSAGERIE
+                                                            </button>
+                                                            <button
+                                                                className={styles.btnCancel}
+                                                                style={{ padding: '8px 20px', fontSize: '0.75rem', minWidth: '80px', height: 'auto', border: '1px solid var(--accent)' }}
                                                                 onClick={() => {
                                                                     setSelectedClientForFiche({ ...client });
+                                                                    setShowReferralsInFiche(false);
                                                                     setIsFicheModalOpen(true);
                                                                 }}
                                                             >
-                                                                {client.name}
-                                                                {client.tier === 'Membre Gold' && (
-                                                                    <span className={styles.goldBadge}><Star size={9} /> GOLD</span>
-                                                                )}
-                                                            </h4>
-                                                            <p>{client.email}</p>
-                                                            <div className={styles.clientPasswordRow}>
-                                                                <span className={styles.clientPasswordLabel}>MDP:</span>
-                                                                <span
-                                                                    className={styles.clientPasswordValue}
-                                                                    style={{ cursor: 'pointer' }}
-                                                                    title="Cliquer pour copier"
-                                                                    onClick={() => {
-                                                                        if (client.password) {
-                                                                            navigator.clipboard.writeText(client.password);
-                                                                            Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Mot de passe copié !', showConfirmButton: false, timer: 1500, timerProgressBar: true });
-                                                                        }
-                                                                    }}
-                                                                >
-                                                                    {visiblePasswordId === client.id ? (client.password || '—') : '••••••••'}
-                                                                </span>
-                                                                <button
-                                                                    className={styles.clientPasswordToggle}
-                                                                    onClick={() => setVisiblePasswordId(visiblePasswordId === client.id ? null : client.id)}
-                                                                    title={visiblePasswordId === client.id ? 'Masquer' : 'Afficher'}
-                                                                >
-                                                                    {visiblePasswordId === client.id ? <EyeOff size={13} /> : <Eye size={13} />}
-                                                                </button>
-                                                            </div>
+                                                                {t('ficheClient')}
+                                                            </button>
+                                                            <button
+                                                                className={styles.btnSaveLux}
+                                                                style={{ padding: '8px 20px', fontSize: '0.75rem', minWidth: '100px' }}
+                                                                onClick={() => {
+                                                                    setEditingClient({ ...client, password: '' });
+                                                                    setIsEditClientModalOpen(true);
+                                                                }}
+                                                            >
+                                                                {t('edit') || 'Modifier'}
+                                                            </button>
+                                                            <button
+                                                                className={styles.btnDeleteLux}
+                                                                style={{ padding: '8px 20px', fontSize: '0.75rem', minWidth: '100px' }}
+                                                                onClick={async () => {
+                                                                    if (confirm(t('confirmDeleteUser'))) {
+                                                                        await removeUser({ variables: { userId: client.id } });
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {t('delete')}
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                    <div className={styles.clientCardActions} style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-
-                                                        <button
-                                                            className={styles.btnSaveLux}
-                                                            style={{ 
-                                                                padding: '8px 20px', 
-                                                                fontSize: '0.75rem', 
-                                                                minWidth: '120px', 
-                                                                background: 'rgba(223, 185, 109, 0.1)', 
-                                                                color: 'var(--accent)',
-                                                                border: '1px solid rgba(223, 185, 109, 0.3)',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                justifyContent: 'center',
-                                                                gap: '8px'
-                                                            }}
-                                                            onClick={() => {
-                                                                setInitialChatUserForInbox({
-                                                                    id: Number(client.id),
-                                                                    name: client.name,
-                                                                    email: client.email,
-                                                                    image: client.image,
-                                                                    tier: client.tier
-                                                                });
-                                                                setIsAdminInboxOpen(true);
-                                                            }}
-                                                        >
-                                                            <MessageSquare size={14} />
-                                                            MESSAGERIE
-                                                        </button>
-                                                        <button
-                                                            className={styles.btnCancel}
-                                                            style={{ padding: '8px 20px', fontSize: '0.75rem', minWidth: '80px', height: 'auto', border: '1px solid var(--accent)' }}
-                                                            onClick={() => {
-                                                                setSelectedClientForFiche({ ...client });
-                                                                setIsFicheModalOpen(true);
-                                                            }}
-                                                        >
-                                                            {t('ficheClient')}
-                                                        </button>
-                                                        <button
-                                                            className={styles.btnSaveLux}
-                                                            style={{ padding: '8px 20px', fontSize: '0.75rem', minWidth: '100px' }}
-                                                            onClick={() => {
-                                                                setEditingClient({ ...client, password: '' });
-                                                                setIsEditClientModalOpen(true);
-                                                            }}
-                                                        >
-                                                            {t('edit') || 'Modifier'}
-                                                        </button>
-                                                        <button
-                                                            className={styles.btnDeleteLux}
-                                                            style={{ padding: '8px 20px', fontSize: '0.75rem', minWidth: '100px' }}
-                                                            onClick={async () => {
-                                                                if (confirm(t('confirmDeleteUser'))) {
-                                                                    await removeUser({ variables: { userId: client.id } });
-                                                                }
-                                                            }}
-                                                        >
-                                                            {t('delete')}
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))
+                                                ))
                                         ) : (
                                             <div className={styles.emptyState}>{t('noClients')}</div>
                                         )}
@@ -2429,7 +3608,7 @@ export default function Dashboard() {
                 {/* Booking Modal */}
                 <AnimatePresence>
                     {isBookingModalOpen && (
-                        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div key="booking-modal-overlay" className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0, y: 50 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -2444,7 +3623,36 @@ export default function Dashboard() {
 
                                 <div className={styles.modalBody}>
                                     <h4 style={{ marginBottom: '10px' }}>{bookingService?.name}</h4>
-                                    <p className="text-gold" style={{ marginBottom: '20px' }}>{bookingService?.price} DT • {bookingService?.duration}</p>
+                                    <p className="text-gold" style={{ marginBottom: '20px', fontSize: '1.2rem', fontWeight: 'bold' }}>
+                                        {calculateDynamicPrice(
+                                            selectedGender === 'homme' ? (bookingService?.price_homme || bookingService?.price) : (bookingService?.price_femme || bookingService?.price),
+                                            bookingService?.duration,
+                                            bookingDuration
+                                        ).toFixed(0)} DT • {bookingDuration} min
+                                    </p>
+
+                                    <label className={styles.pickerLabel}>Choisir la durée</label>
+                                    <div style={{ display: 'flex', gap: '10px', marginBottom: '25px', flexWrap: 'wrap' }}>
+                                        {[30, 45, 60, 90].map(d => (
+                                            <button
+                                                key={d}
+                                                className={bookingDuration === d ? styles.durationBtnActive : styles.durationBtn}
+                                                onClick={() => setBookingDuration(d)}
+                                                style={{
+                                                    padding: '10px 20px',
+                                                    borderRadius: '12px',
+                                                    border: bookingDuration === d ? '2px solid #DFB96D' : '1px solid rgba(223, 185, 109, 0.3)',
+                                                    background: bookingDuration === d ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
+                                                    color: bookingDuration === d ? '#DFB96D' : '#9a8878',
+                                                    fontWeight: 'bold',
+                                                    cursor: 'pointer',
+                                                    transition: 'all 0.3s ease'
+                                                }}
+                                            >
+                                                {d} min
+                                            </button>
+                                        ))}
+                                    </div>
 
                                     <label className={styles.pickerLabel}>{t('selectDate')}</label>
                                     <div className={styles.calendarWrapper}>
@@ -2541,31 +3749,73 @@ export default function Dashboard() {
 
                                     <label className={styles.pickerLabel}>{t('selectSpecialist')}</label>
                                     <div className={styles.specialistGrid}>
-                                        {prestataires.map((p: any) => (
-                                            <div
-                                                key={p.id}
-                                                onClick={() => setBookingStaff(p.id)}
-                                                style={{
-                                                    border: bookingStaff === p.id ? '1px solid #DFB96D' : '1px solid rgba(255,255,255,0.1)',
-                                                    padding: '10px',
-                                                    borderRadius: '8px',
-                                                    cursor: 'pointer',
-                                                    textAlign: 'center',
-                                                    background: bookingStaff === p.id ? 'rgba(223, 185, 109, 0.2)' : 'transparent'
-                                                }}
-                                            >
-                                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                                                    {p.image ? (
-                                                        <img src={p.image} alt={p.name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', marginBottom: '5px' }} />
-                                                    ) : (
-                                                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '5px' }}>
-                                                            <UserCheck color="var(--accent)" size={20} opacity={0.5} />
+                                        {(data?.prestataires || [])
+                                            .filter((p: any) => {
+                                                // 1. Filter by service
+                                                if (bookingService?.id && String(p.service_id) !== String(bookingService.id)) return false;
+
+                                                if (!bookingDate) return true; // Show all if date not selected yet
+
+                                                const bookingStart = new Date(bookingDate).getTime();
+                                                const bookingEnd = bookingStart + bookingDuration * 60000;
+
+                                                // 2. Check for time overlap with existing reservations
+                                                const isBookedInApp = (data?.allReservations || []).some((res: any) => {
+                                                    if (res.status === 'cancelled' || !res.date) return false;
+                                                    if (String(res.prestataire?.id) !== String(p.id)) return false;
+
+                                                    const resStart = new Date(res.date).getTime();
+                                                    const resDuration = res.duration || 60;
+                                                    const resEnd = resStart + resDuration * 60000;
+
+                                                    return (bookingStart < resEnd) && (bookingEnd > resStart);
+                                                });
+
+                                                if (isBookedInApp) return false;
+
+                                                // 3. Check for time overlap with external (Google Calendar) events
+                                                const isBusyExternal = (data?.externalEvents || []).some((ev: any) => {
+                                                    // Only block if the external event is explicitly linked to this specialist
+                                                    if (ev.prestataireId && String(ev.prestataireId) !== String(p.id)) return false;
+                                                    if (!ev.prestataireId) return false; // Don't block if we don't know who it belongs to
+
+                                                    const evStart = new Date(ev.startDate).getTime();
+                                                    const evEnd = new Date(ev.endDate).getTime();
+
+                                                    return (bookingStart < evEnd) && (bookingEnd > evStart);
+                                                });
+
+                                                return !isBusyExternal;
+                                            })
+                                            .map((p: any) => {
+                                                return (
+                                                    <div
+                                                        key={p.id}
+                                                        onClick={() => setBookingStaff(p.id)}
+                                                        style={{
+                                                            border: bookingStaff === p.id ? '1px solid #DFB96D' : '1px solid rgba(255,255,255,0.1)',
+                                                            padding: '10px',
+                                                            borderRadius: '8px',
+                                                            cursor: 'pointer',
+                                                            textAlign: 'center',
+                                                            background: bookingStaff === p.id ? 'rgba(223, 185, 109, 0.2)' : 'transparent',
+                                                            opacity: 1,
+                                                            position: 'relative'
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                                                            {p.image ? (
+                                                                <img src={p.image} alt={p.name} style={{ width: '40px', height: '40px', borderRadius: '50%', objectFit: 'cover', marginBottom: '5px' }} />
+                                                            ) : (
+                                                                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#F8F5F0', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '5px' }}>
+                                                                    <UserCheck color="var(--accent)" size={20} opacity={0.5} />
+                                                                </div>
+                                                            )}
+                                                            <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1A0F0A' }}>{p.name.split(' ')[0]}</span>
                                                         </div>
-                                                    )}
-                                                    <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#1A0F0A' }}>{p.name.split(' ')[0]}</span>
-                                                </div>
-                                            </div>
-                                        ))}
+                                                    </div>
+                                                );
+                                            })}
                                     </div>
 
                                     <div className={styles.modalActions}>
@@ -2581,7 +3831,14 @@ export default function Dashboard() {
                                                         userId: user?.id,
                                                         serviceId: bookingService?.id,
                                                         prestataireId: bookingStaff,
-                                                        date: bookingDate
+                                                        date: bookingDate,
+                                                        duration: bookingDuration,
+                                                        totalPrice: calculateDynamicPrice(
+                                                            selectedGender === 'homme' ? (bookingService?.price_homme || bookingService?.price) : (bookingService?.price_femme || bookingService?.price),
+                                                            bookingService?.duration,
+                                                            bookingDuration
+                                                        ),
+                                                        genre: selectedGender
                                                     }
                                                 });
                                                 swalLux('success', t('resConfirmed'));
@@ -2601,7 +3858,7 @@ export default function Dashboard() {
                 {/* Cart Modal */}
                 <AnimatePresence>
                     {isCartModalOpen && (
-                        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div key="cart-modal-overlay" className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0, y: 50 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -2686,21 +3943,21 @@ export default function Dashboard() {
                                             if (cart.length === 0 && (!waitingData?.myReservations || waitingData.myReservations.filter((r: any) => r.status === 'pending').length === 0)) {
                                                 return swalLux('info', t('cartEmpty'));
                                             }
-                                            
+
                                             swalLux('info', 'Paiement', t('paymentProcessing'), { showConfirmButton: false, allowOutsideClick: false });
-                                            
+
                                             try {
                                                 // Process Products
                                                 for (const prod of cart) {
                                                     await purchaseProduct({ variables: { userId: user?.id, productId: prod.id } });
                                                 }
-                                                
+
                                                 // Process Pending Services
                                                 const pendingRes = waitingData?.myReservations?.filter((r: any) => r.status === 'pending') || [];
                                                 for (const res of pendingRes) {
                                                     await updateReservationStatus({ variables: { id: res.id, status: 'confirmed' } });
                                                 }
-                                                
+
                                                 setCart([]);
                                                 setIsCartModalOpen(false);
                                                 swalLux('success', t('success'), t('paymentSuccess'));
@@ -2721,7 +3978,7 @@ export default function Dashboard() {
                 {/* Rating Modal */}
                 <AnimatePresence>
                     {isRatingModalOpen && (
-                        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div key="rating-modal-overlay" className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0, y: 50 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -2750,9 +4007,9 @@ export default function Dashboard() {
                                                 onClick={() => setRating(star)}
                                                 style={{ color: star <= rating ? '#DFB96D' : 'rgba(223, 185, 109, 0.4)' }}
                                             >
-                                                <Star 
-                                                    size={32} 
-                                                    fill={star <= rating ? '#DFB96D' : 'none'} 
+                                                <Star
+                                                    size={32}
+                                                    fill={star <= rating ? '#DFB96D' : 'none'}
                                                     strokeWidth={2}
                                                 />
                                             </motion.button>
@@ -2851,7 +4108,7 @@ export default function Dashboard() {
                 {/* Clients Management Modal */}
                 <AnimatePresence>
                     {isClientsModalOpen && (
-                        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div key="clients-mgmt-modal-overlay" className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0, y: 30 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -2864,6 +4121,24 @@ export default function Dashboard() {
                                         <Users color="var(--accent)" size={20} />
                                     </div>
                                     <h3>{t('manageClients')}</h3>
+                                    <button
+                                        onClick={handleExportClients}
+                                        className={styles.btnSaveLux}
+                                        style={{
+                                            marginLeft: 'auto',
+                                            marginRight: '20px',
+                                            padding: '8px 16px',
+                                            fontSize: '0.8rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '8px',
+                                            width: 'auto',
+                                            height: 'fit-content'
+                                        }}
+                                    >
+                                        <Download size={14} />
+                                        Exporter
+                                    </button>
                                     <button onClick={() => setIsClientsModalOpen(false)} className={styles.closeBtn}>×</button>
                                 </div>
                                 <div className={styles.modalBody}>
@@ -2877,6 +4152,7 @@ export default function Dashboard() {
                                         {data?.clients?.map((client: any) => (
                                             <div key={client.id} className={styles.tableRow} style={{ gridTemplateColumns: '1.5fr 1.5fr 0.8fr 1fr' }} onClick={() => {
                                                 setSelectedClientForFiche({ ...client });
+                                                setShowReferralsInFiche(false);
                                                 setIsFicheModalOpen(true);
                                             }}>
                                                 <div className={styles.tableName}>
@@ -2960,7 +4236,7 @@ export default function Dashboard() {
                 {/* Specialists Management Modal */}
                 <AnimatePresence>
                     {isSpecialistsModalOpen && (
-                        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div key="specialists-mgmt-modal-overlay" className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0, y: 30 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -3014,7 +4290,7 @@ export default function Dashboard() {
                 {/* Revenue Management Modal */}
                 <AnimatePresence>
                     {isRevenueModalOpen && (
-                        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div key="revenue-mgmt-modal-overlay" className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0, y: 30 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -3141,7 +4417,7 @@ export default function Dashboard() {
                 {/* Agenda Management Modal */}
                 <AnimatePresence>
                     {isAgendaModalOpen && (
-                        <div className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
+                        <div key="agenda-mgmt-modal-overlay" className={styles.modalOverlay} onClick={(e) => e.target === e.currentTarget && closeAllModals()}>
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0, y: 30 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -3200,7 +4476,7 @@ export default function Dashboard() {
                                             return matchesSearch && matchesService;
                                         }).map((res: any) => (
                                             <div key={res.id} className={styles.tableRow} style={{ gridTemplateColumns: '1fr 2fr 1.5fr 1fr' }}>
-                                                <div 
+                                                <div
                                                     className={styles.agendaTimeCell}
                                                     onClick={() => user?.role === 'admin' && handleTimeChange(res.id, res.date)}
                                                     style={{ cursor: user?.role === 'admin' ? 'pointer' : 'default', fontWeight: '800' }}
@@ -3218,8 +4494,8 @@ export default function Dashboard() {
                                                     <UserCheck size={12} />
                                                     <span>{res.prestataire?.name || 'Non assigné'}</span>
                                                 </div>
-                                                <div 
-                                                    className={`${styles.intelStatus} ${styles[res.status]}`} 
+                                                <div
+                                                    className={`${styles.intelStatus} ${styles[res.status]}`}
                                                     style={{ width: 'fit-content', cursor: user?.role === 'admin' ? 'pointer' : 'default' }}
                                                     onClick={() => {
                                                         if (user?.role === 'admin') handleStatusChange(res.id, res.status);
@@ -3242,7 +4518,7 @@ export default function Dashboard() {
                 {/* Edit & Action Modals (Placed at the end for correct layering) */}
                 <AnimatePresence>
                     {isEditClientModalOpen && editingClient && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsEditClientModalOpen(false)}>
+                        <div key="edit-client-modal" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsEditClientModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -3259,14 +4535,14 @@ export default function Dashboard() {
                                 </div>
                                 <div className={styles.modalBody}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '25px' }}>
-                                        <div 
-                                            className={styles.statIconLux} 
-                                            style={{ 
-                                                width: '100px', 
-                                                height: '100px', 
-                                                position: 'relative', 
-                                                overflow: 'hidden', 
-                                                cursor: 'pointer', 
+                                        <div
+                                            className={styles.statIconLux}
+                                            style={{
+                                                width: '100px',
+                                                height: '100px',
+                                                position: 'relative',
+                                                overflow: 'hidden',
+                                                cursor: 'pointer',
                                                 borderRadius: '50%',
                                                 border: '2px solid var(--accent)',
                                                 background: 'rgba(223, 185, 109, 0.05)'
@@ -3278,11 +4554,11 @@ export default function Dashboard() {
                                             ) : (
                                                 <Users color="var(--accent)" size={40} />
                                             )}
-                                            <div style={{ 
-                                                position: 'absolute', 
-                                                bottom: 0, 
-                                                width: '100%', 
-                                                background: 'rgba(26, 15, 10, 0.6)', 
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: 0,
+                                                width: '100%',
+                                                background: 'rgba(26, 15, 10, 0.6)',
                                                 padding: '4px 0',
                                                 display: 'flex',
                                                 justifyContent: 'center',
@@ -3317,6 +4593,16 @@ export default function Dashboard() {
                                                 className={styles.luxuryInput}
                                                 value={editingClient.email}
                                                 onChange={(e) => setEditingClient({ ...editingClient, email: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>{t('phone') || 'Téléphone'}</label>
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                value={editingClient.phone || ''}
+                                                placeholder="00 000 000"
+                                                onChange={(e) => setEditingClient({ ...editingClient, phone: e.target.value })}
                                             />
                                         </div>
                                         <div className={styles.inputGroup}>
@@ -3374,30 +4660,30 @@ export default function Dashboard() {
                                             />
                                         </div>
                                     </div>
-                                        <div className={styles.inputGroup} style={{ marginTop: '10px' }}>
-                                            <button
-                                                type="button"
-                                                onClick={() => setEditingClient({ ...editingClient, is_blocked: !editingClient.is_blocked })}
-                                                style={{
-                                                    padding: '12px 20px',
-                                                    borderRadius: '12px',
-                                                    background: editingClient.is_blocked ? 'rgba(46, 204, 113, 0.1)' : 'rgba(231, 76, 60, 0.1)',
-                                                    border: `1.5px solid ${editingClient.is_blocked ? '#2ecc71' : '#e74c3c'}`,
-                                                    color: editingClient.is_blocked ? '#27ae60' : '#c0392b',
-                                                    fontWeight: 700,
-                                                    fontSize: '0.9rem',
-                                                    cursor: 'pointer',
-                                                    width: '100%',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    gap: '10px',
-                                                    transition: 'all 0.2s'
-                                                }}
-                                            >
-                                                {editingClient.is_blocked ? 'Débloquer cet utilisateur' : 'Bloquer cet utilisateur'}
-                                            </button>
-                                        </div>
+                                    <div className={styles.inputGroup} style={{ marginTop: '10px' }}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setEditingClient({ ...editingClient, is_blocked: !editingClient.is_blocked })}
+                                            style={{
+                                                padding: '12px 20px',
+                                                borderRadius: '12px',
+                                                background: editingClient.is_blocked ? 'rgba(46, 204, 113, 0.1)' : 'rgba(231, 76, 60, 0.1)',
+                                                border: `1.5px solid ${editingClient.is_blocked ? '#2ecc71' : '#e74c3c'}`,
+                                                color: editingClient.is_blocked ? '#27ae60' : '#c0392b',
+                                                fontWeight: 700,
+                                                fontSize: '0.9rem',
+                                                cursor: 'pointer',
+                                                width: '100%',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                gap: '10px',
+                                                transition: 'all 0.2s'
+                                            }}
+                                        >
+                                            {editingClient.is_blocked ? 'Débloquer cet utilisateur' : 'Bloquer cet utilisateur'}
+                                        </button>
+                                    </div>
                                     <div className={styles.modalActions} style={{ marginTop: '30px' }}>
                                         <button className={styles.btnCancel} onClick={() => setIsEditClientModalOpen(false)}>{t('cancel')}</button>
                                         <button className={styles.btnSaveLux} onClick={async () => {
@@ -3406,6 +4692,7 @@ export default function Dashboard() {
                                                     userId: editingClient.id,
                                                     name: editingClient.name,
                                                     email: editingClient.email,
+                                                    phone: editingClient.phone,
                                                     role: editingClient.role,
                                                     tier: editingClient.tier,
                                                     image: editingClient.image,
@@ -3429,7 +4716,7 @@ export default function Dashboard() {
                     )}
 
                     {isAddClientModalOpen && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsAddClientModalOpen(false)}>
+                        <div key="add-client-modal" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsAddClientModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -3446,14 +4733,14 @@ export default function Dashboard() {
                                 </div>
                                 <div className={styles.modalBody}>
                                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '25px' }}>
-                                        <div 
-                                            className={styles.statIconLux} 
-                                            style={{ 
-                                                width: '100px', 
-                                                height: '100px', 
-                                                position: 'relative', 
-                                                overflow: 'hidden', 
-                                                cursor: 'pointer', 
+                                        <div
+                                            className={styles.statIconLux}
+                                            style={{
+                                                width: '100px',
+                                                height: '100px',
+                                                position: 'relative',
+                                                overflow: 'hidden',
+                                                cursor: 'pointer',
                                                 borderRadius: '50%',
                                                 border: '2px solid var(--accent)',
                                                 background: 'rgba(223, 185, 109, 0.05)'
@@ -3465,11 +4752,11 @@ export default function Dashboard() {
                                             ) : (
                                                 <Users color="var(--accent)" size={40} />
                                             )}
-                                            <div style={{ 
-                                                position: 'absolute', 
-                                                bottom: 0, 
-                                                width: '100%', 
-                                                background: 'rgba(26, 15, 10, 0.6)', 
+                                            <div style={{
+                                                position: 'absolute',
+                                                bottom: 0,
+                                                width: '100%',
+                                                background: 'rgba(26, 15, 10, 0.6)',
                                                 padding: '4px 0',
                                                 display: 'flex',
                                                 justifyContent: 'center',
@@ -3597,7 +4884,7 @@ export default function Dashboard() {
                     )}
 
                     {isAddSpecialistModalOpen && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsAddSpecialistModalOpen(false)}>
+                        <div key="add-specialist-modal" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsAddSpecialistModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -3647,15 +4934,60 @@ export default function Dashboard() {
                                                 onChange={(e) => setNewSpecialist({ ...newSpecialist, specialty: e.target.value })}
                                             />
                                         </div>
+                                        <div className={styles.inputGroup} style={{ position: 'relative' }}>
+                                            <label>Service Assigné</label>
+                                            <div
+                                                className={styles.luxuryInput}
+                                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                                                onClick={() => { closeAllManualSelects(); setIsAddSpecServiceOpen(!isAddSpecServiceOpen); }}
+                                            >
+                                                <span style={{ color: newSpecialist.serviceId ? '#1A0F0A' : '#9a8878' }}>
+                                                    {newSpecialist.serviceId
+                                                        ? (data?.services?.find((s: any) => s.id === newSpecialist.serviceId)?.name || 'Service')
+                                                        : 'Sélectionner un service'}
+                                                </span>
+                                                <motion.div animate={{ rotate: isAddSpecServiceOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                    <ChevronDown size={16} color="#DFB96D" />
+                                                </motion.div>
+                                            </div>
+                                            <AnimatePresence>
+                                                {isAddSpecServiceOpen && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        transition={{ duration: 0.15 }}
+                                                        className={styles.reservationDropdownMenu}
+                                                        style={{ width: '100%', zIndex: 100 }}
+                                                    >
+                                                        <div className={styles.reservationDropdownList}>
+                                                            {(data?.services || []).map((s: any) => (
+                                                                <div
+                                                                    key={s.id}
+                                                                    className={styles.reservationDropdownItem}
+                                                                    onClick={() => {
+                                                                        setNewSpecialist({ ...newSpecialist, serviceId: s.id });
+                                                                        setIsAddSpecServiceOpen(false);
+                                                                    }}
+                                                                >
+                                                                    <span className={styles.itemName}>{s.name}</span>
+                                                                    <span className={styles.itemPrice}>{s.price} DT</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
                                         <div className={styles.inputGroup} style={{ gridColumn: 'span 2' }}>
                                             <label>Photo du Spécialiste</label>
                                             <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '10px' }}>
-                                                <div 
-                                                    style={{ 
-                                                        width: '100px', 
-                                                        height: '100px', 
-                                                        borderRadius: '15px', 
-                                                        background: '#fff', 
+                                                <div
+                                                    style={{
+                                                        width: '100px',
+                                                        height: '100px',
+                                                        borderRadius: '15px',
+                                                        background: '#fff',
                                                         border: '2px dashed rgba(223, 185, 109, 0.3)',
                                                         display: 'flex',
                                                         alignItems: 'center',
@@ -3687,8 +5019,8 @@ export default function Dashboard() {
                                                         style={{ display: 'none' }}
                                                         id="specialist-image-upload"
                                                     />
-                                                    <label 
-                                                        htmlFor="specialist-image-upload" 
+                                                    <label
+                                                        htmlFor="specialist-image-upload"
                                                         className={styles.btnSaveLux}
                                                         style={{ display: 'inline-flex', padding: '10px 20px', fontSize: '0.85rem', cursor: 'pointer' }}
                                                     >
@@ -3763,7 +5095,7 @@ export default function Dashboard() {
                                                     <button
                                                         key={c.id}
                                                         type="button"
-                                                        onClick={() => setNewSpecialist({...newSpecialist, calendar_color_id: c.id})}
+                                                        onClick={() => setNewSpecialist({ ...newSpecialist, calendar_color_id: c.id })}
                                                         style={{
                                                             width: '28px',
                                                             height: '28px',
@@ -3806,27 +5138,21 @@ export default function Dashboard() {
                                         try {
                                             await addSpecialist({
                                                 variables: {
-                                                    name: newSpecialist.name,
-                                                    role: newSpecialist.role,
-                                                    specialty: newSpecialist.specialty,
+                                                    ...newSpecialist,
                                                     image: newSpecialist.image || 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?q=80&w=200&auto=format&fit=crop',
-                                                    rating: newSpecialist.rating,
-                                                    satisfied_clients: newSpecialist.satisfied_clients,
-                                                    tech_expertise: newSpecialist.tech_expertise,
-                                                    hosp_expertise: newSpecialist.hosp_expertise,
-                                                    prec_expertise: newSpecialist.prec_expertise,
-                                                    award_badge: newSpecialist.award_badge,
-                                                    calendar_color_id: newSpecialist.calendar_color_id,
-                                                    historique: newSpecialist.historique
+                                                    rating: parseFloat(newSpecialist.rating.toString()),
+                                                    tech_expertise: parseInt(newSpecialist.tech_expertise.toString()),
+                                                    hosp_expertise: parseInt(newSpecialist.hosp_expertise.toString()),
+                                                    prec_expertise: parseInt(newSpecialist.prec_expertise.toString()),
+                                                    serviceId: newSpecialist.serviceId || null
                                                 }
                                             });
-                                            Swal.fire({ title: 'Succès', text: 'Spécialiste ajouté avec succès !', icon: 'success', confirmButtonColor: '#DFB96D' });
+                                            swalLux('success', 'Spécialiste ajouté', 'Le nouveau spécialiste a été créé avec succès.');
                                             setIsAddSpecialistModalOpen(false);
-                                            setNewSpecialist({ 
+                                            setNewSpecialist({
                                                 name: '', role: '', specialty: '', image: '', rating: 5.0,
-                                                satisfied_clients: '1.2k', tech_expertise: 95, hosp_expertise: 95, prec_expertise: 95, award_badge: 'Meilleur Spécialiste',
-                                                historique: '',
-                                                calendar_color_id: '1'
+                                                satisfied_clients: '1.2k', tech_expertise: 95, hosp_expertise: 95, prec_expertise: 95,
+                                                award_badge: 'Meilleur Spécialiste', historique: '', calendar_color_id: '1', serviceId: ''
                                             });
                                         } catch (e) {
                                             console.error(e);
@@ -3842,7 +5168,7 @@ export default function Dashboard() {
 
                     {/* Add Service Modal */}
                     {isAddServiceModalOpen && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsAddServiceModalOpen(false)}>
+                        <div key="add-service-modal" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsAddServiceModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -3859,15 +5185,28 @@ export default function Dashboard() {
                                 </div>
                                 <div className={styles.modalBody}>
                                     <div style={{ display: 'grid', gap: '20px' }}>
-                                        <div className={styles.uploadContainer}>
-                                            <div className={styles.previewTile} onClick={() => document.getElementById('new-service-upload')?.click()}>
-                                                {newService.image ? (
-                                                    <img src={newService.image} alt="Preview" />
-                                                ) : (
-                                                    <div className={styles.previewPlaceholder}>
-                                                        <Upload className="text-gold" />
-                                                        <span>{t('uploadImage') || 'Télécharger une image'}</span>
-                                                    </div>
+                                            <div className={styles.previewTile}>
+                                                <div style={{ width: '100%', height: '100%' }} onClick={() => document.getElementById('new-service-upload')?.click()}>
+                                                    {newService.image ? (
+                                                        <img src={newService.image} alt="Preview" />
+                                                    ) : (
+                                                        <div className={styles.previewPlaceholder}>
+                                                            <Upload className="text-gold" />
+                                                            <span>{t('uploadImage') || 'Télécharger une image'}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                {newService.image && (
+                                                    <button 
+                                                        className={styles.deleteImageBtn}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setNewService({ ...newService, image: '' });
+                                                        }}
+                                                        title="Supprimer la photo"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
                                                 )}
                                                 {isUploading && (
                                                     <div className={styles.uploadLoading}>
@@ -3882,7 +5221,6 @@ export default function Dashboard() {
                                                 style={{ display: 'none' }}
                                                 onChange={(e) => handleFileUpload(e, 'new')}
                                             />
-                                        </div>
                                         <div className={styles.inputGroup}>
                                             <label>{t('name')}</label>
                                             <input
@@ -3904,32 +5242,128 @@ export default function Dashboard() {
                                         </div>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                                             <div className={styles.inputGroup}>
-                                                <label>{t('price')} (DT)</label>
+                                                <label>Prix Homme (DT)</label>
+                                                <input
+                                                    type="number"
+                                                    className={styles.luxuryInput}
+                                                    placeholder="130"
+                                                    value={newService.price_homme || ''}
+                                                    onChange={(e) => setNewService({ ...newService, price_homme: e.target.value })}
+                                                />
+                                            </div>
+                                            <div className={styles.inputGroup}>
+                                                <label>Prix Femme (DT)</label>
                                                 <input
                                                     type="number"
                                                     className={styles.luxuryInput}
                                                     placeholder="120"
-                                                    value={newService.price}
-                                                    onChange={(e) => setNewService({ ...newService, price: e.target.value })}
+                                                    value={newService.price_femme || ''}
+                                                    onChange={(e) => setNewService({ ...newService, price_femme: e.target.value })}
                                                 />
                                             </div>
-                                            <div className={styles.inputGroup}>
-                                                <label>{t('duration')}</label>
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Visibilité</label>
+                                            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                                {['homme', 'femme', 'both'].map(v => (
+                                                    <button
+                                                        key={v}
+                                                        className={(newService.visibility || 'both') === v ? styles.durationBtnActive : styles.durationBtn}
+                                                        onClick={() => setNewService({ ...newService, visibility: v })}
+                                                        style={{
+                                                            flex: 1,
+                                                            padding: '10px',
+                                                            borderRadius: '12px',
+                                                            border: newService.visibility === v ? '2px solid #DFB96D' : '1px solid rgba(223, 185, 109, 0.3)',
+                                                            background: newService.visibility === v ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
+                                                            color: newService.visibility === v ? '#DFB96D' : '#9a8878',
+                                                            fontWeight: 'bold',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.3s ease',
+                                                            textTransform: 'uppercase',
+                                                            fontSize: '0.8rem'
+                                                        }}
+                                                    >
+                                                        {v === 'both' ? 'Les deux' : v}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
+                                            <div className={styles.inputGroup} style={{ width: '200px' }}>
+                                                <label style={{ textAlign: 'center', display: 'block' }}>{t('duration')}</label>
                                                 <input
                                                     type="text"
                                                     className={styles.luxuryInput}
+                                                    style={{ textAlign: 'center' }}
                                                     placeholder="60 mins"
                                                     value={newService.duration}
                                                     onChange={(e) => setNewService({ ...newService, duration: e.target.value })}
                                                 />
                                             </div>
                                         </div>
+                                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
+                                            <div className={styles.inputGroup} style={{ width: '200px', position: 'relative' }}>
+                                                <label style={{ textAlign: 'center', display: 'block' }}>Catégorie</label>
+                                                <div
+                                                    className={styles.luxuryInput}
+                                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                                                    onClick={() => { closeAllManualSelects(); setIsAddServiceCatOpen(!isAddServiceCatOpen); }}
+                                                >
+                                                    <span style={{ color: newService.categoryId ? '#1A0F0A' : '#9a8878', flex: 1, textAlign: 'center' }}>
+                                                        {newService.categoryId
+                                                            ? (data?.serviceCategories?.find((c: any) => c.id === newService.categoryId)?.name || 'Catégorie')
+                                                            : 'Aucune catégorie'}
+                                                    </span>
+                                                    <motion.div animate={{ rotate: isAddServiceCatOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                        <ChevronDown size={16} color="#DFB96D" />
+                                                    </motion.div>
+                                                </div>
+                                                <AnimatePresence>
+                                                    {isAddServiceCatOpen && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                            transition={{ duration: 0.15 }}
+                                                            className={styles.reservationDropdownMenu}
+                                                            style={{ width: '100%', zIndex: 100 }}
+                                                        >
+                                                            <div className={styles.reservationDropdownList}>
+                                                                <div
+                                                                    className={styles.reservationDropdownItem}
+                                                                    onClick={() => {
+                                                                        setNewService({ ...newService, categoryId: '' });
+                                                                        setIsAddServiceCatOpen(false);
+                                                                    }}
+                                                                >
+                                                                    <span className={styles.itemName}>Aucune catégorie</span>
+                                                                </div>
+                                                                {(data?.serviceCategories || []).map((cat: any) => (
+                                                                    <div
+                                                                        key={cat.id}
+                                                                        className={styles.reservationDropdownItem}
+                                                                        onClick={() => {
+                                                                            setNewService({ ...newService, categoryId: cat.id });
+                                                                            setIsAddServiceCatOpen(false);
+                                                                        }}
+                                                                    >
+                                                                        <span className={styles.itemName}>{cat.name}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div className={styles.modalActions} style={{ marginTop: '30px' }}>
                                         <button className={styles.btnCancel} onClick={() => setIsAddServiceModalOpen(false)}>{t('cancel')}</button>
                                         <button className={styles.btnSaveLux} onClick={async () => {
-                                            if (!newService.name || !newService.price || !newService.image) {
-                                                Swal.fire({ title: 'Attention', text: 'Nom, prix et image sont obligatoires', icon: 'warning', confirmButtonColor: '#DFB96D' });
+                                            if (!newService.name || (!newService.price_homme && !newService.price_femme)) {
+                                                Swal.fire({ title: 'Attention', text: 'Nom et prix sont obligatoires', icon: 'warning', confirmButtonColor: '#DFB96D' });
                                                 return;
                                             }
                                             try {
@@ -3937,14 +5371,18 @@ export default function Dashboard() {
                                                     variables: {
                                                         name: newService.name,
                                                         description: newService.description,
-                                                        price: parseFloat(newService.price),
+                                                        price: parseFloat(newService.price_femme || newService.price_homme || '0'),
+                                                        price_homme: newService.price_homme ? parseFloat(newService.price_homme) : null,
+                                                        price_femme: newService.price_femme ? parseFloat(newService.price_femme) : null,
                                                         image: newService.image,
-                                                        duration: newService.duration
+                                                        duration: newService.duration,
+                                                        visibility: newService.visibility,
+                                                        categoryId: newService.categoryId || null
                                                     }
                                                 });
                                                 Swal.fire({ title: 'Succès', text: 'Service ajouté avec succès !', icon: 'success', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
                                                 setIsAddServiceModalOpen(false);
-                                                setNewService({ name: '', description: '', price: '', image: '', duration: '' });
+                                                setNewService({ name: '', description: '', price: '', price_homme: '', price_femme: '', image: '', duration: '', visibility: 'both', categoryId: '' });
                                             } catch (e) {
                                                 console.error(e);
                                                 Swal.fire({ title: 'Erreur', text: 'Erreur lors de l\'ajout du service', icon: 'error', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
@@ -3958,7 +5396,7 @@ export default function Dashboard() {
 
                     {/* Edit Service Modal */}
                     {isEditServiceModalOpen && editingService && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsEditServiceModalOpen(false)}>
+                        <div key="edit-service-modal" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsEditServiceModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -3975,20 +5413,33 @@ export default function Dashboard() {
                                 </div>
                                 <div className={styles.modalBody}>
                                     <div style={{ display: 'grid', gap: '20px' }}>
-                                        <div className={styles.uploadContainer}>
-                                            <div className={styles.previewTile} onClick={() => document.getElementById('edit-service-upload')?.click()}>
-                                                {editingService.image ? (
-                                                    <img src={editingService.image} alt="Preview" />
-                                                ) : (
-                                                    <div className={styles.previewPlaceholder}>
-                                                        <Upload className="text-gold" />
-                                                        <span>{t('uploadImage') || 'Télécharger une image'}</span>
+                                            <div className={styles.previewTile}>
+                                                <div style={{ width: '100%', height: '100%' }} onClick={() => document.getElementById('edit-service-upload')?.click()}>
+                                                    {editingService.image ? (
+                                                        <img src={editingService.image} alt="Preview" />
+                                                    ) : (
+                                                        <div className={styles.previewPlaceholder}>
+                                                            <Upload className="text-gold" />
+                                                            <span>{t('uploadImage') || 'Télécharger une image'}</span>
+                                                        </div>
+                                                    )}
+                                                    <div className={styles.uploadOverlay}>
+                                                        <Upload size={24} />
+                                                        <span>{t('changeImage') || 'Changer l\'image'}</span>
                                                     </div>
-                                                )}
-                                                <div className={styles.uploadOverlay}>
-                                                    <Upload size={24} />
-                                                    <span>{t('changeImage') || 'Changer l\'image'}</span>
                                                 </div>
+                                                {editingService.image && (
+                                                    <button 
+                                                        className={styles.deleteImageBtn}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            setEditingService({ ...editingService, image: '' });
+                                                        }}
+                                                        title="Supprimer la photo"
+                                                    >
+                                                        <Trash2 size={16} />
+                                                    </button>
+                                                )}
                                                 {isUploading && (
                                                     <div className={styles.uploadLoading}>
                                                         <Loader2 className="animate-spin text-gold" />
@@ -4002,7 +5453,6 @@ export default function Dashboard() {
                                                 style={{ display: 'none' }}
                                                 onChange={(e) => handleFileUpload(e, 'edit')}
                                             />
-                                        </div>
                                         <div className={styles.inputGroup}>
                                             <label>{t('name')}</label>
                                             <input
@@ -4022,22 +5472,117 @@ export default function Dashboard() {
                                         </div>
                                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
                                             <div className={styles.inputGroup}>
-                                                <label>{t('price')} (DT)</label>
+                                                <label>Prix Homme (DT)</label>
                                                 <input
                                                     type="number"
                                                     className={styles.luxuryInput}
-                                                    value={editingService.price}
-                                                    onChange={(e) => setEditingService({ ...editingService, price: e.target.value })}
+                                                    value={editingService.price_homme || ''}
+                                                    onChange={(e) => setEditingService({ ...editingService, price_homme: e.target.value })}
                                                 />
                                             </div>
                                             <div className={styles.inputGroup}>
-                                                <label>{t('duration')}</label>
+                                                <label>Prix Femme (DT)</label>
+                                                <input
+                                                    type="number"
+                                                    className={styles.luxuryInput}
+                                                    value={editingService.price_femme || ''}
+                                                    onChange={(e) => setEditingService({ ...editingService, price_femme: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div className={styles.inputGroup}>
+                                            <label>Visibilité</label>
+                                            <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                                                {['homme', 'femme', 'both'].map(v => (
+                                                    <button
+                                                        key={v}
+                                                        className={(editingService.visibility || 'both') === v ? styles.durationBtnActive : styles.durationBtn}
+                                                        onClick={() => setEditingService({ ...editingService, visibility: v })}
+                                                        style={{
+                                                            flex: 1,
+                                                            padding: '10px',
+                                                            borderRadius: '12px',
+                                                            border: editingService.visibility === v ? '2px solid #DFB96D' : '1px solid rgba(223, 185, 109, 0.3)',
+                                                            background: editingService.visibility === v ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
+                                                            color: editingService.visibility === v ? '#DFB96D' : '#9a8878',
+                                                            fontWeight: 'bold',
+                                                            cursor: 'pointer',
+                                                            transition: 'all 0.3s ease',
+                                                            textTransform: 'uppercase',
+                                                            fontSize: '0.8rem'
+                                                        }}
+                                                    >
+                                                        {v === 'both' ? 'Les deux' : v}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
+                                            <div className={styles.inputGroup} style={{ width: '200px' }}>
+                                                <label style={{ textAlign: 'center', display: 'block' }}>{t('duration')}</label>
                                                 <input
                                                     type="text"
                                                     className={styles.luxuryInput}
+                                                    style={{ textAlign: 'center' }}
                                                     value={editingService.duration}
                                                     onChange={(e) => setEditingService({ ...editingService, duration: e.target.value })}
                                                 />
+                                            </div>
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'center', marginTop: '10px' }}>
+                                            <div className={styles.inputGroup} style={{ width: '200px', position: 'relative' }}>
+                                                <label style={{ textAlign: 'center', display: 'block' }}>Catégorie</label>
+                                                <div
+                                                    className={styles.luxuryInput}
+                                                    style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                                                    onClick={() => { closeAllManualSelects(); setIsEditServiceCatOpen(!isEditServiceCatOpen); }}
+                                                >
+                                                    <span style={{ color: editingService.categoryId ? '#1A0F0A' : '#9a8878', flex: 1, textAlign: 'center' }}>
+                                                        {editingService.categoryId
+                                                            ? (data?.serviceCategories?.find((c: any) => c.id === editingService.categoryId)?.name || 'Catégorie')
+                                                            : 'Aucune catégorie'}
+                                                    </span>
+                                                    <motion.div animate={{ rotate: isEditServiceCatOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                        <ChevronDown size={16} color="#DFB96D" />
+                                                    </motion.div>
+                                                </div>
+                                                <AnimatePresence>
+                                                    {isEditServiceCatOpen && (
+                                                        <motion.div
+                                                            initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                            exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                            transition={{ duration: 0.15 }}
+                                                            className={styles.reservationDropdownMenu}
+                                                            style={{ width: '100%', zIndex: 100 }}
+                                                        >
+                                                            <div className={styles.reservationDropdownList}>
+                                                                <div
+                                                                    className={styles.reservationDropdownItem}
+                                                                    onClick={() => {
+                                                                        setEditingService({ ...editingService, categoryId: '' });
+                                                                        setIsEditServiceCatOpen(false);
+                                                                    }}
+                                                                >
+                                                                    <span className={styles.itemName}>Aucune catégorie</span>
+                                                                </div>
+                                                                {(data?.serviceCategories || []).map((cat: any) => (
+                                                                    <div
+                                                                        key={cat.id}
+                                                                        className={styles.reservationDropdownItem}
+                                                                        onClick={() => {
+                                                                            setEditingService({ ...editingService, categoryId: cat.id });
+                                                                            setIsEditServiceCatOpen(false);
+                                                                        }}
+                                                                    >
+                                                                        <span className={styles.itemName}>{cat.name}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </motion.div>
+                                                    )}
+                                                </AnimatePresence>
                                             </div>
                                         </div>
                                     </div>
@@ -4050,9 +5595,13 @@ export default function Dashboard() {
                                                         id: editingService.id,
                                                         name: editingService.name,
                                                         description: editingService.description,
-                                                        price: parseFloat(editingService.price),
+                                                        price: parseFloat(editingService.price_femme || editingService.price_homme || '0'),
+                                                        price_homme: editingService.price_homme ? parseFloat(editingService.price_homme) : null,
+                                                        price_femme: editingService.price_femme ? parseFloat(editingService.price_femme) : null,
                                                         image: editingService.image,
-                                                        duration: editingService.duration
+                                                        duration: editingService.duration,
+                                                        visibility: editingService.visibility,
+                                                        categoryId: editingService.categoryId || null
                                                     }
                                                 });
                                                 Swal.fire({ title: 'Succès', text: 'Service mis à jour !', icon: 'success', confirmButtonColor: '#DFB96D', background: '#F8F5F0' });
@@ -4070,7 +5619,7 @@ export default function Dashboard() {
 
                     {/* Add Product Modal */}
                     {isAddProductModalOpen && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsAddProductModalOpen(false)}>
+                        <div key="add-product-modal" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsAddProductModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -4169,7 +5718,7 @@ export default function Dashboard() {
 
                     {/* Edit Product Modal */}
                     {isEditProductModalOpen && editingProduct && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 2000 }} onClick={(e) => e.target === e.currentTarget && setIsEditProductModalOpen(false)}>
+                        <div key="edit-product-modal" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsEditProductModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.8, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
@@ -4268,7 +5817,7 @@ export default function Dashboard() {
                     )}
                     {/* Fiche Client Modal starts here */}
                     {isFicheModalOpen && selectedClientForFiche && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 1100 }} onClick={(e) => e.target === e.currentTarget && setIsFicheModalOpen(false)}>
+                        <div key="fiche-client-modal" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsFicheModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0, y: 30 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -4380,38 +5929,79 @@ export default function Dashboard() {
                                                 onChange={(e) => setSelectedClientForFiche({ ...selectedClientForFiche, last_visit_notes: e.target.value })}
                                                 style={{ minHeight: '80px' }} />
                                         </div>
+
+                                        <div className={styles.inputGroup} style={{ gridColumn: 'span 2', marginTop: '10px' }}>
+                                            <button
+                                                className="btn-lux"
+                                                style={{ width: '100%', justifyContent: 'center', background: showReferralsInFiche ? 'var(--accent)' : 'rgba(223, 185, 109, 0.1)', color: showReferralsInFiche ? '#000' : 'var(--accent)' }}
+                                                onClick={() => setShowReferralsInFiche(!showReferralsInFiche)}
+                                            >
+                                                <Users size={18} style={{ marginRight: '8px' }} />
+                                                {showReferralsInFiche ? 'Masquer les parrainages' : 'Voir les parrainages'}
+                                            </button>
+                                        </div>
+
+                                        {showReferralsInFiche && (
+                                            <div className={styles.inputGroup} style={{ gridColumn: 'span 2', background: 'rgba(0,0,0,0.1)', padding: '15px', borderRadius: '10px', border: '1px solid rgba(223, 185, 109, 0.1)' }}>
+                                                <h4 style={{ margin: '0 0 15px 0', fontSize: '0.9rem', color: '#DFB96D', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                    <Sparkles size={16} /> Clients parrainés
+                                                </h4>
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                                    {(data?.clients?.filter((c: any) => c.referred_by?.id === selectedClientForFiche?.id)?.length || 0) > 0 ? (
+                                                        data?.clients
+                                                            ?.filter((c: any) => c.referred_by?.id === selectedClientForFiche?.id)
+                                                            .map((refClient: any) => (
+                                                                <div key={refClient.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px', background: 'rgba(255,255,255,0.03)', borderRadius: '8px' }}>
+                                                                    <div style={{ width: '30px', height: '30px', borderRadius: '50%', overflow: 'hidden', background: '#222', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                        {refClient.image ? <img src={refClient.image} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Users size={14} />}
+                                                                    </div>
+                                                                    <div style={{ flex: 1 }}>
+                                                                        <p style={{ margin: 0, fontSize: '0.85rem', fontWeight: '500' }}>{refClient.name}</p>
+                                                                        <p style={{ margin: 0, fontSize: '0.75rem', opacity: 0.6 }}>{refClient.email}</p>
+                                                                    </div>
+                                                                    <div style={{ fontSize: '0.8rem', color: '#DFB96D' }}>
+                                                                        {refClient.points} pts
+                                                                    </div>
+                                                                </div>
+                                                            ))
+                                                    ) : (
+                                                        <p style={{ textAlign: 'center', fontSize: '0.85rem', opacity: 0.5, margin: '10px 0' }}>Aucun client parrainé pour le moment.</p>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <div className={styles.modalActions}>
-                                        <button className={styles.btnCancel} onClick={() => setIsFicheModalOpen(false)}>{t('cancel')}</button>
-                                        <button className={styles.btnSaveLux} onClick={async () => {
-                                            try {
-                                                await updateUser({
-                                                    variables: {
-                                                        userId: selectedClientForFiche.id,
-                                                        hair_color_pref: selectedClientForFiche.hair_color_pref,
-                                                        favorite_coupe: selectedClientForFiche.favorite_coupe,
-                                                        nail_color_pref: selectedClientForFiche.nail_color_pref,
-                                                        skin_type: selectedClientForFiche.skin_type,
-                                                        music_pref: selectedClientForFiche.music_pref,
-                                                        drink_pref: selectedClientForFiche.drink_pref,
-                                                        coffee_pref: selectedClientForFiche.coffee_pref,
-                                                        employee_pref: selectedClientForFiche.employee_pref,
-                                                        favourite_service: selectedClientForFiche.favourite_service,
-                                                        allergies: selectedClientForFiche.allergies,
-                                                        last_visit_notes: selectedClientForFiche.last_visit_notes,
-                                                        birthday: selectedClientForFiche.birthday,
-                                                        phone: selectedClientForFiche.phone,
-                                                        image: selectedClientForFiche.image
-                                                    }
-                                                });
-                                                Swal.fire({ title: t('success'), text: 'Fiche client mise à jour !', icon: 'success', confirmButtonColor: '#DFB96D' });
-                                                setIsFicheModalOpen(false);
-                                            } catch (e) {
-                                                console.error(e);
-                                                Swal.fire({ title: t('error'), text: 'Une erreur est survenue.', icon: 'error' });
-                                            }
-                                        }}>{t('save')}</button>
-                                    </div>
+                                </div>
+                                <div className={styles.modalActions}>
+                                    <button className={styles.btnCancel} onClick={() => setIsFicheModalOpen(false)}>{t('cancel')}</button>
+                                    <button className={styles.btnSaveLux} onClick={async () => {
+                                        try {
+                                            await updateUser({
+                                                variables: {
+                                                    userId: selectedClientForFiche.id,
+                                                    hair_color_pref: selectedClientForFiche.hair_color_pref,
+                                                    favorite_coupe: selectedClientForFiche.favorite_coupe,
+                                                    nail_color_pref: selectedClientForFiche.nail_color_pref,
+                                                    skin_type: selectedClientForFiche.skin_type,
+                                                    music_pref: selectedClientForFiche.music_pref,
+                                                    drink_pref: selectedClientForFiche.drink_pref,
+                                                    coffee_pref: selectedClientForFiche.coffee_pref,
+                                                    employee_pref: selectedClientForFiche.employee_pref,
+                                                    favourite_service: selectedClientForFiche.favourite_service,
+                                                    allergies: selectedClientForFiche.allergies,
+                                                    last_visit_notes: selectedClientForFiche.last_visit_notes,
+                                                    birthday: selectedClientForFiche.birthday,
+                                                    phone: selectedClientForFiche.phone,
+                                                    image: selectedClientForFiche.image
+                                                }
+                                            });
+                                            Swal.fire({ title: t('success'), text: 'Fiche client mise à jour !', icon: 'success', confirmButtonColor: '#DFB96D' });
+                                            setIsFicheModalOpen(false);
+                                        } catch (e) {
+                                            console.error(e);
+                                            Swal.fire({ title: t('error'), text: 'Une erreur est survenue.', icon: 'error' });
+                                        }
+                                    }}>{t('save')}</button>
                                 </div>
                             </motion.div>
                         </div>
@@ -4419,7 +6009,7 @@ export default function Dashboard() {
 
                     {/* Specialist Historique Modal */}
                     {isHistoriqueModalOpen && selectedSpecialistForHistorique && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 1100 }} onClick={(e) => e.target === e.currentTarget && setIsHistoriqueModalOpen(false)}>
+                        <div key="specialist-edit-modal" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsHistoriqueModalOpen(false)}>
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0, y: 30 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -4441,84 +6031,138 @@ export default function Dashboard() {
                                     <div className={styles.inputGrid} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                                         <div className={styles.inputGroup}>
                                             <label>Nom complet</label>
-                                            <input 
-                                                type="text" 
-                                                className={styles.luxuryInput} 
-                                                value={selectedSpecialistForHistorique.name || ''} 
-                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, name: e.target.value})}
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                value={selectedSpecialistForHistorique.name || ''}
+                                                onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, name: e.target.value })}
                                             />
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>Rôle</label>
-                                            <input 
-                                                type="text" 
-                                                className={styles.luxuryInput} 
-                                                value={selectedSpecialistForHistorique.role || ''} 
-                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, role: e.target.value})}
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                value={selectedSpecialistForHistorique.role || ''}
+                                                onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, role: e.target.value })}
                                             />
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>Spécialité</label>
-                                            <input 
-                                                type="text" 
-                                                className={styles.luxuryInput} 
-                                                value={selectedSpecialistForHistorique.specialty || ''} 
-                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, specialty: e.target.value})}
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                value={selectedSpecialistForHistorique.specialty || ''}
+                                                onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, specialty: e.target.value })}
                                             />
+                                        </div>
+                                        <div className={styles.inputGroup} style={{ position: 'relative' }}>
+                                            <label>Service Assigné</label>
+                                            <div
+                                                className={styles.luxuryInput}
+                                                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
+                                                onClick={() => setIsEditSpecServiceOpen(!isEditSpecServiceOpen)}
+                                            >
+                                                <span style={{ color: selectedSpecialistForHistorique.service_id ? '#1A0F0A' : '#9a8878' }}>
+                                                    {selectedSpecialistForHistorique.service_id
+                                                        ? (data?.services?.find((s: any) => s.id === selectedSpecialistForHistorique.service_id)?.name || 'Service')
+                                                        : 'Sélectionner un service'}
+                                                </span>
+                                                <motion.div animate={{ rotate: isEditSpecServiceOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                                                    <ChevronDown size={16} color="#DFB96D" />
+                                                </motion.div>
+                                            </div>
+                                            <AnimatePresence>
+                                                {isEditSpecServiceOpen && (
+                                                    <motion.div
+                                                        initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                                                        transition={{ duration: 0.15 }}
+                                                        className={styles.reservationDropdownMenu}
+                                                        style={{ width: '100%', zIndex: 100 }}
+                                                    >
+                                                        <div className={styles.reservationDropdownList}>
+                                                            <div
+                                                                className={styles.reservationDropdownItem}
+                                                                onClick={() => {
+                                                                    setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, service_id: null });
+                                                                    setIsEditSpecServiceOpen(false);
+                                                                }}
+                                                            >
+                                                                <span className={styles.itemName}>Aucun service</span>
+                                                            </div>
+                                                            {(data?.services || []).map((s: any) => (
+                                                                <div
+                                                                    key={s.id}
+                                                                    className={styles.reservationDropdownItem}
+                                                                    onClick={() => {
+                                                                        setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, service_id: s.id });
+                                                                        setIsEditSpecServiceOpen(false);
+                                                                    }}
+                                                                >
+                                                                    <span className={styles.itemName}>{s.name}</span>
+                                                                    <span className={styles.itemPrice}>{s.price} DT</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>Note (0-5)</label>
-                                            <input 
-                                                type="number" 
+                                            <input
+                                                type="number"
                                                 step="0.1"
-                                                className={styles.luxuryInput} 
-                                                value={selectedSpecialistForHistorique.rating || 5} 
-                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, rating: parseFloat(e.target.value)})}
+                                                className={styles.luxuryInput}
+                                                value={selectedSpecialistForHistorique.rating || 5}
+                                                onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, rating: parseFloat(e.target.value) })}
                                             />
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>Clients Satisfaits</label>
-                                            <input 
-                                                type="text" 
-                                                className={styles.luxuryInput} 
-                                                value={selectedSpecialistForHistorique.satisfied_clients || ''} 
-                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, satisfied_clients: e.target.value})}
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                value={selectedSpecialistForHistorique.satisfied_clients || ''}
+                                                onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, satisfied_clients: e.target.value })}
                                             />
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>Badge / Distinction</label>
-                                            <input 
-                                                type="text" 
-                                                className={styles.luxuryInput} 
-                                                value={selectedSpecialistForHistorique.award_badge || ''} 
-                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, award_badge: e.target.value})}
+                                            <input
+                                                type="text"
+                                                className={styles.luxuryInput}
+                                                value={selectedSpecialistForHistorique.award_badge || ''}
+                                                onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, award_badge: e.target.value })}
                                             />
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>Expertise Technique (%)</label>
-                                            <input 
-                                                type="number" 
-                                                className={styles.luxuryInput} 
-                                                value={selectedSpecialistForHistorique.tech_expertise || 95} 
-                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, tech_expertise: parseInt(e.target.value)})}
+                                            <input
+                                                type="number"
+                                                className={styles.luxuryInput}
+                                                value={selectedSpecialistForHistorique.tech_expertise || 95}
+                                                onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, tech_expertise: parseInt(e.target.value) })}
                                             />
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>Expertise Hospitalité (%)</label>
-                                            <input 
-                                                type="number" 
-                                                className={styles.luxuryInput} 
-                                                value={selectedSpecialistForHistorique.hosp_expertise || 95} 
-                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, hosp_expertise: parseInt(e.target.value)})}
+                                            <input
+                                                type="number"
+                                                className={styles.luxuryInput}
+                                                value={selectedSpecialistForHistorique.hosp_expertise || 95}
+                                                onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, hosp_expertise: parseInt(e.target.value) })}
                                             />
                                         </div>
                                         <div className={styles.inputGroup}>
                                             <label>Expertise Précision (%)</label>
-                                            <input 
-                                                type="number" 
-                                                className={styles.luxuryInput} 
-                                                value={selectedSpecialistForHistorique.prec_expertise || 95} 
-                                                onChange={(e) => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, prec_expertise: parseInt(e.target.value)})}
+                                            <input
+                                                type="number"
+                                                className={styles.luxuryInput}
+                                                value={selectedSpecialistForHistorique.prec_expertise || 95}
+                                                onChange={(e) => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, prec_expertise: parseInt(e.target.value) })}
                                             />
                                         </div>
                                     </div>
@@ -4530,7 +6174,7 @@ export default function Dashboard() {
                                                 <button
                                                     key={c.id}
                                                     type="button"
-                                                    onClick={() => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, calendar_color_id: c.id})}
+                                                    onClick={() => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, calendar_color_id: c.id })}
                                                     style={{
                                                         width: '32px',
                                                         height: '32px',
@@ -4555,13 +6199,13 @@ export default function Dashboard() {
                                     <div className={styles.inputGroup} style={{ marginTop: '20px' }}>
                                         <label>Image du Spécialiste</label>
                                         <div style={{ display: 'flex', gap: '20px', alignItems: 'center', marginTop: '10px' }}>
-                                            <div 
-                                                className={styles.statIconLux} 
-                                                style={{ 
-                                                    width: '100px', 
-                                                    height: '100px', 
-                                                    position: 'relative', 
-                                                    overflow: 'hidden', 
+                                            <div
+                                                className={styles.statIconLux}
+                                                style={{
+                                                    width: '100px',
+                                                    height: '100px',
+                                                    position: 'relative',
+                                                    overflow: 'hidden',
                                                     borderRadius: '20px',
                                                     border: '2px dashed var(--accent)',
                                                     background: 'rgba(223, 185, 109, 0.05)',
@@ -4579,29 +6223,29 @@ export default function Dashboard() {
                                                     </div>
                                                 )}
                                             </div>
-                                            
+
                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                                <button 
+                                                <button
                                                     type="button"
-                                                    className="btn-lux" 
+                                                    className="btn-lux"
                                                     style={{ padding: '10px 20px', fontSize: '0.85rem' }}
                                                     onClick={() => document.getElementById('edit-specialist-upload')?.click()}
                                                 >
                                                     <Upload size={14} style={{ marginRight: '8px' }} /> {selectedSpecialistForHistorique.image ? 'Changer l\'image' : 'Télécharger'}
                                                 </button>
-                                                
+
                                                 {selectedSpecialistForHistorique.image && (
-                                                    <button 
+                                                    <button
                                                         type="button"
-                                                        className="btn-lux" 
-                                                        style={{ 
-                                                            padding: '10px 20px', 
-                                                            fontSize: '0.85rem', 
-                                                            background: 'rgba(255, 68, 68, 0.1)', 
-                                                            border: '1px solid #ff4444', 
-                                                            color: '#ff4444' 
+                                                        className="btn-lux"
+                                                        style={{
+                                                            padding: '10px 20px',
+                                                            fontSize: '0.85rem',
+                                                            background: 'rgba(255, 68, 68, 0.1)',
+                                                            border: '1px solid #ff4444',
+                                                            color: '#ff4444'
                                                         }}
-                                                        onClick={() => setSelectedSpecialistForHistorique({...selectedSpecialistForHistorique, image: ''})}
+                                                        onClick={() => setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, image: '' })}
                                                     >
                                                         <Trash2 size={14} style={{ marginRight: '8px' }} /> Supprimer
                                                     </button>
@@ -4645,7 +6289,8 @@ export default function Dashboard() {
                                                         hosp_expertise: selectedSpecialistForHistorique.hosp_expertise,
                                                         prec_expertise: selectedSpecialistForHistorique.prec_expertise,
                                                         award_badge: selectedSpecialistForHistorique.award_badge,
-                                                        calendar_color_id: selectedSpecialistForHistorique.calendar_color_id
+                                                        calendar_color_id: selectedSpecialistForHistorique.calendar_color_id,
+                                                        serviceId: selectedSpecialistForHistorique.service_id || null
                                                     }
                                                 });
                                                 Swal.fire({ title: t('success'), text: 'Profil mis à jour !', icon: 'success', confirmButtonColor: '#DFB96D' });
@@ -4662,7 +6307,7 @@ export default function Dashboard() {
                     )}
                     {/* Add Reservation Modal */}
                     {isAddReservationModalOpen && (
-                        <div className={styles.modalOverlay} onClick={() => { setIsAddReservationModalOpen(false); closeAllManualSelects(); }}>
+                        <div key="add-reservation-modal-overlay" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={() => { setIsAddReservationModalOpen(false); closeAllManualSelects(); }}>
                             <motion.div
                                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                                 animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -4707,6 +6352,7 @@ export default function Dashboard() {
                                             <AnimatePresence>
                                                 {isManualClientSearchOpen && (
                                                     <motion.div
+                                                        key="manual-client-search-dropdown"
                                                         initial={{ opacity: 0, y: -6, scale: 0.98 }}
                                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                                         exit={{ opacity: 0, y: -6, scale: 0.98 }}
@@ -4768,6 +6414,7 @@ export default function Dashboard() {
                                             <AnimatePresence>
                                                 {isManualServiceSearchOpen && (
                                                     <motion.div
+                                                        key="manual-service-search-dropdown"
                                                         initial={{ opacity: 0, y: -6, scale: 0.98 }}
                                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                                         exit={{ opacity: 0, y: -6, scale: 0.98 }}
@@ -4821,6 +6468,7 @@ export default function Dashboard() {
                                             <AnimatePresence>
                                                 {isManualSpecialistSearchOpen && (
                                                     <motion.div
+                                                        key="manual-specialist-search-dropdown"
                                                         initial={{ opacity: 0, y: -6, scale: 0.98 }}
                                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                                         exit={{ opacity: 0, y: -6, scale: 0.98 }}
@@ -4829,23 +6477,25 @@ export default function Dashboard() {
                                                         onClick={(e) => e.stopPropagation()}
                                                     >
                                                         <div className={styles.reservationDropdownList}>
-                                                            {(data?.prestataires || []).map((p: any) => (
-                                                                <div
-                                                                    key={p.id}
-                                                                    className={styles.reservationDropdownItem}
-                                                                    onClick={() => {
-                                                                        setManualReservation({ ...manualReservation, prestataireId: p.id });
-                                                                        setIsManualSpecialistSearchOpen(false);
-                                                                    }}
-                                                                >
-                                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                                                        {p.calendar_color_id && (
-                                                                            <div className={styles.itemDot} style={{ background: getColorHex(p.calendar_color_id) }} />
-                                                                        )}
-                                                                        <span className={styles.itemName}>{p.name}</span>
+                                                            {(data?.prestataires || [])
+                                                                .filter((p: any) => !manualReservation.serviceId || p.service_id === manualReservation.serviceId)
+                                                                .map((p: any) => (
+                                                                    <div
+                                                                        key={p.id}
+                                                                        className={styles.reservationDropdownItem}
+                                                                        onClick={() => {
+                                                                            setManualReservation({ ...manualReservation, prestataireId: p.id });
+                                                                            setIsManualSpecialistSearchOpen(false);
+                                                                        }}
+                                                                    >
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                            {p.calendar_color_id && (
+                                                                                <div className={styles.itemDot} style={{ background: getColorHex(p.calendar_color_id) }} />
+                                                                            )}
+                                                                            <span className={styles.itemName}>{p.name}</span>
+                                                                        </div>
                                                                     </div>
-                                                                </div>
-                                                            ))}
+                                                                ))}
                                                         </div>
                                                     </motion.div>
                                                 )}
@@ -4871,6 +6521,7 @@ export default function Dashboard() {
                                             <AnimatePresence>
                                                 {isManualDatePickerOpen && (
                                                     <motion.div
+                                                        key="manual-date-picker-panel"
                                                         initial={{ opacity: 0, y: -8, scale: 0.98 }}
                                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                                         exit={{ opacity: 0, y: -8, scale: 0.98 }}
@@ -4984,7 +6635,7 @@ export default function Dashboard() {
                     )}
                     {/* Payment Mode Selection Modal */}
                     {isPaymentModalOpen && selectedReservationForPayment && (
-                        <div className={styles.modalOverlay} style={{ zIndex: 3000 }} onClick={(e) => { if (e.target === e.currentTarget) { setIsPaymentModalOpen(false); setPaymentModeLine(''); setPointsToDeduct(''); } }}>
+                        <div key="payment-mode-modal-overlay" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => { if (e.target === e.currentTarget) { setIsPaymentModalOpen(false); setPaymentModeLine(''); setPointsToDeduct(''); } }}>
                             <motion.div
                                 initial={{ scale: 0.9, opacity: 0, y: 20 }}
                                 animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -5097,6 +6748,7 @@ export default function Dashboard() {
                                                 <AnimatePresence>
                                                     {usePointsCombo && (
                                                         <motion.div
+                                                            key="points-calculator-panel"
                                                             initial={{ opacity: 0, height: 0 }}
                                                             animate={{ opacity: 1, height: 'auto' }}
                                                             exit={{ opacity: 0, height: 0 }}
@@ -5248,6 +6900,86 @@ export default function Dashboard() {
                             </motion.div>
                         </div>
                     )}
+                    {/* Category Management Modal */}
+                    <AnimatePresence>
+                        {isCategoryModalOpen && (
+                            <div key="category-modal-overlay" className={styles.modalOverlay} style={{ zIndex: 6000 }} onClick={(e) => e.target === e.currentTarget && setIsCategoryModalOpen(false)}>
+                                <motion.div
+                                    initial={{ scale: 0.8, opacity: 0 }}
+                                    animate={{ scale: 1, opacity: 1 }}
+                                    exit={{ scale: 0.8, opacity: 0 }}
+                                    className={styles.modal}
+                                    onClick={(e) => e.stopPropagation()}
+                                >
+                                    <div className={styles.modalHeader}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', gap: '15px' }}>
+                                            <Layers className="text-gold" />
+                                            <h3 style={{ margin: 0 }}>Gérer les catégories</h3>
+                                        </div>
+                                        <button className={styles.closeModal} onClick={() => { setIsCategoryModalOpen(false); setEditingCategory(null); setNewCategoryName(''); }}>×</button>
+                                    </div>
+
+                                    <div className={styles.modalBody} style={{ padding: '30px' }}>
+                                        <div className={styles.inputGroup} style={{ marginBottom: '20px' }}>
+                                            <label>{editingCategory ? 'Modifier la catégorie' : 'Nouvelle catégorie'}</label>
+                                            <div style={{ display: 'flex', gap: '10px' }}>
+                                                <input
+                                                    type="text"
+                                                    className={styles.luxuryInput}
+                                                    placeholder="ex: Massage, Visage, Ongles..."
+                                                    value={newCategoryName}
+                                                    onChange={(e) => setNewCategoryName(e.target.value)}
+                                                />
+                                                <button 
+                                                    className={styles.btnSaveLux} 
+                                                    style={{ width: 'auto', padding: '0 25px' }}
+                                                    onClick={editingCategory ? handleUpdateCategory : handleAddCategory}
+                                                >
+                                                    {editingCategory ? 'OK' : 'Ajouter'}
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        <div className={styles.categoryList} style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                            {data?.serviceCategories?.map((cat: any) => (
+                                                <div key={cat.id} style={{ 
+                                                    display: 'flex', 
+                                                    justifyContent: 'space-between', 
+                                                    alignItems: 'center', 
+                                                    padding: '12px 15px', 
+                                                    background: 'rgba(223, 185, 109, 0.05)', 
+                                                    borderRadius: '12px', 
+                                                    marginBottom: '10px' 
+                                                }}>
+                                                    <span style={{ fontWeight: 600 }}>{cat.name}</span>
+                                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                                        <button 
+                                                            style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
+                                                            onClick={() => {
+                                                                setEditingCategory(cat);
+                                                                setNewCategoryName(cat.name);
+                                                            }}
+                                                        >
+                                                            <Edit2 size={16} />
+                                                        </button>
+                                                        <button 
+                                                            style={{ background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer' }}
+                                                            onClick={() => handleRemoveCategory(cat.id)}
+                                                        >
+                                                            <Trash2 size={16} />
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {(!data?.serviceCategories || data.serviceCategories.length === 0) && (
+                                                <p style={{ textAlign: 'center', opacity: 0.6, marginTop: '20px' }}>Aucune catégorie créée.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            </div>
+                        )}
+                    </AnimatePresence>
                 </AnimatePresence>
             </main >
 
@@ -5255,6 +6987,7 @@ export default function Dashboard() {
             <AnimatePresence>
                 {isAdminInboxOpen && user?.role === 'admin' && (
                     <AdminInbox
+                        key="admin-inbox"
                         adminId={Number(user.id)}
                         adminName={user.name || 'Admin'}
                         initialChatUser={initialChatUserForInbox}
@@ -5265,7 +6998,7 @@ export default function Dashboard() {
                             fetch(`/api/chat/unread?userId=${user.id}`)
                                 .then(r => r.json())
                                 .then(d => setAdminUnreadCount(d.count || 0))
-                                .catch(() => {});
+                                .catch(() => { });
                         }}
                         styles={styles}
                     />
@@ -5278,6 +7011,7 @@ export default function Dashboard() {
                     <AnimatePresence>
                         {isClientChatOpen && (
                             <ChatWindow
+                                key="client-chat-window"
                                 currentUserId={Number(user.id)}
                                 currentUserRole={user.role || 'client'}
                                 currentUserName={user.name || 'Client'}

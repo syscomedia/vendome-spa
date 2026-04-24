@@ -100,7 +100,7 @@
     border-radius: 20px;
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     font-weight: 500;
-    text-align: left;
+    text-align: start;
     width: 100%;
     transform-style: preserve-3d;
 }
@@ -108,7 +108,7 @@
 .navItem:hover {
     color: white;
     background: rgba(255, 255, 255, 0.05);
-    padding-left: 25px;
+    padding-inline-start: 25px;
 }
 
 .navItem.active {
@@ -134,11 +134,12 @@
 
 .navActiveIndicator {
     position: absolute;
-    left: -12px;
+    inset-inline-start: -12px;
     width: 4px;
     height: 40px;
     background: var(--accent);
-    border-radius: 0 10px 10px 0;
+    border-start-end-radius: 10px;
+    border-end-end-radius: 10px;
     box-shadow:
         0 0 20px var(--accent),
         0 0 10px rgba(223, 185, 109, 0.5);
@@ -202,7 +203,7 @@
     font-size: 0.85rem;
     color: rgba(255, 255, 255, 0.7);
     transition: all 0.2s;
-    text-align: left;
+    text-align: start;
     background: transparent;
     border: none;
     cursor: pointer;
@@ -252,8 +253,8 @@
 /* --- HERO BANNER --- */
 .heroBanner {
     position: relative;
-    height: 480px;
-    background: url('https://images.unsplash.com/photo-1600334089648-b0d9d3028eb2?q=80&w=2070&auto=format&fit=crop') center/cover no-repeat;
+    height: 600px;
+    background: url('/storefront.jpg') center 25%/cover no-repeat;
     display: flex;
     align-items: center;
     padding: 0 80px;
@@ -2092,7 +2093,7 @@
     font-weight: 600;
     color: rgba(26,15,10,0.7);
     transition: all 0.18s;
-    text-align: left;
+    text-align: start;
 }
 
 .ficheDrinkCard:hover { border-color: var(--accent); background: white; }
@@ -2164,7 +2165,7 @@
     background: #FAFAF8;
     cursor: pointer;
     transition: all 0.2s;
-    text-align: left;
+    text-align: start;
     position: relative;
     overflow: hidden;
 }
@@ -2747,7 +2748,7 @@
     padding: 12px 15px;
     border-radius: 12px;
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     font-size: 0.85rem;
     font-weight: 700;
     transition: all 0.3s ease;
@@ -2773,7 +2774,7 @@
     padding: 12px 15px;
     border-radius: 12px;
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     font-size: 0.85rem;
     font-weight: 700;
     transition: all 0.3s ease;
@@ -3080,7 +3081,7 @@
     transition: all 0.2s ease;
     border: none;
     background: transparent;
-    text-align: left;
+    text-align: start;
     width: 100%;
 }
 
@@ -3331,6 +3332,30 @@
     cursor: pointer;
     position: relative;
     transition: all 0.3s ease;
+}
+
+.deleteImageBtn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 68, 68, 0.9);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    z-index: 100;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
+}
+
+.deleteImageBtn:hover {
+    background: #ff4444 !important;
+    transform: scale(1.1);
 }
 
 .previewTile:hover {
@@ -4553,7 +4578,7 @@
         flex-direction: column;
         align-items: flex-start;
         justify-content: center; /* Move to center/top instead of flex-end */
-        text-align: left;
+        text-align: start;
         position: relative;
     }
 
@@ -4635,7 +4660,7 @@
     .sectionHeader {
         margin-bottom: 20px;
         align-items: flex-start;
-        text-align: left;
+        text-align: start;
     }
 
     .sectionHeader h2 {
@@ -5325,7 +5350,7 @@
     inset: 0;
     background: rgba(0,0,0,0.55);
     backdrop-filter: blur(4px);
-    z-index: 1200;
+    z-index: 6000;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -5411,7 +5436,7 @@
     background: none;
     border: none;
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     transition: background 0.15s;
 }
 
@@ -5502,7 +5527,9 @@
 .adminInboxChat {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
 }
 
 .adminInboxBackBtn {
@@ -5514,7 +5541,7 @@
     font-size: 0.82rem;
     font-weight: 600;
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     font-family: var(--font-sans);
 }
 
@@ -5532,7 +5559,7 @@
     display: flex;
     flex-direction: column;
     box-shadow: 0 24px 70px rgba(0,0,0,0.28), 0 0 0 1px rgba(226,180,92,0.15);
-    z-index: 1150;
+    z-index: 6000;
     overflow: hidden;
 }
 
@@ -6310,7 +6337,6 @@
     }
 }
 
-/* --- FINAL MOBILE APP-LIKE REFINEMENTS --- */
 @media (max-width: 768px) {
     /* Hero Banner Refinement */
     .heroBanner {
@@ -6318,6 +6344,8 @@
         margin: 10px !important;
         border-radius: 30px !important;
         padding: 0 30px !important;
+        background-position: center !important;
+        background-size: cover !important;
     }
 
     .welcomeText {
@@ -6542,6 +6570,8 @@
         padding: 0 20px !important;
         margin: 10px !important;
         border-radius: 25px !important;
+        background-position: center !important;
+        background-size: cover !important;
     }
 
     .welcomeText {

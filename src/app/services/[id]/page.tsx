@@ -7,7 +7,7 @@ import { useQuery } from '@apollo/client/react';
 import { GET_SERVICE } from '@/graphql/queries';
 import { useLanguage } from '@/lib/LanguageContext';
 import styles from './service-detail.module.css';
-import { ArrowLeft, Clock, Zap, Star, ShieldCheck, Calendar } from 'lucide-react';
+import { ArrowLeft, Clock, Zap, Star, ShieldCheck, Calendar, Sparkles } from 'lucide-react';
 
 interface ServiceData {
     service: {
@@ -43,7 +43,7 @@ export default function ServiceDetail() {
         <div className={styles.container}>
             {/* Dynamic Background */}
             <div className={styles.bgWrapper}>
-                <div className={styles.bgImage} style={{ backgroundImage: `url(${service.image})` }} />
+                <div className={styles.bgImage} style={{ backgroundImage: service.image ? `url(${service.image})` : 'linear-gradient(135deg, #FDFCFB 0%, #E2D1C3 100%)' }} />
                 <div className={styles.bgOverlay} />
             </div>
 
@@ -64,7 +64,13 @@ export default function ServiceDetail() {
                         className={styles.visualCol}
                     >
                         <div className={styles.mainImageWrapper}>
-                            <img src={service.image} alt={service.name} className={styles.mainImage} />
+                            {service.image ? (
+                                <img src={service.image} alt={service.name} className={styles.mainImage} />
+                            ) : (
+                                <div style={{ width: '100%', height: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #FDFCFB 0%, #E2D1C3 100%)' }}>
+                                    <Sparkles size={100} color="rgba(223, 185, 109, 0.5)" />
+                                </div>
+                            )}
                             <div className={styles.priceTag}>{service.price} DT</div>
                         </div>
                     </motion.div>

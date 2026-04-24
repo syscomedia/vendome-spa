@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     Upload, Loader2, UserCheck, Scissors, Palette, Music2,
@@ -18,6 +18,7 @@ interface FicheClientTabProps {
     updateUser: (opts: any) => Promise<any>;
     handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>, type: any) => Promise<void>;
     isUploading: boolean;
+    allDrinks: any[];
     t: (key: any) => string;
     styles: any;
 }
@@ -84,13 +85,17 @@ const TIER_COLORS: Record<string, string> = {
 
 export default function FicheClientTab({
     client, prestataires, services, updateUser,
-    handleFileUpload, isUploading, t, styles
+    handleFileUpload, isUploading, allDrinks, t, styles
 }: FicheClientTabProps) {
     const [fiche, setFiche] = useState<any>({ ...client });
     const [saving, setSaving] = useState(false);
     const [activeSection, setActiveSection] = useState<string>('beaute');
     const [saved, setSaved] = useState(false);
     const fileRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        setFiche({ ...client });
+    }, [client]);
 
     const update = (field: string, value: string) =>
         setFiche((prev: any) => ({ ...prev, [field]: value }));
@@ -491,16 +496,21 @@ export default function FicheClientTab({
                                 {fiche.drink_pref && <div className={styles.ficheDoneTag}><Check size={11} /> Choisi</div>}
                             </div>
                             <div className={styles.ficheDrinkGrid}>
-                                {DRINK_OPTIONS.map(d => (
-                                    <button key={d.label}
-                                        className={`${styles.ficheDrinkCard} ${fiche.drink_pref === d.label ? styles.ficheDrinkCardActive : ''}`}
-                                        onClick={() => toggle('drink_pref', d.label)}
-                                    >
-                                        <span className={styles.ficheDrinkEmoji}>{d.emoji}</span>
-                                        <span>{d.label}</span>
-                                        {fiche.drink_pref === d.label && <Check size={12} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
-                                    </button>
-                                ))}
+                                {(allDrinks && allDrinks.length > 0 ? allDrinks : DRINK_OPTIONS).map((d: any) => {
+                                    const label = d.name || d.label;
+                                    const icon = d.image ? <img src={d.image} style={{ width: '20px', height: '20px', borderRadius: '4px', objectFit: 'cover' }} /> : (d.emoji || <Coffee size={16} />);
+                                    
+                                    return (
+                                        <button key={label}
+                                            className={`${styles.ficheDrinkCard} ${fiche.drink_pref === label ? styles.ficheDrinkCardActive : ''}`}
+                                            onClick={() => toggle('drink_pref', label)}
+                                        >
+                                            <span className={styles.ficheDrinkEmoji}>{icon}</span>
+                                            <span>{label}</span>
+                                            {fiche.drink_pref === label && <Check size={12} style={{ marginLeft: 'auto', flexShrink: 0 }} />}
+                                        </button>
+                                    );
+                                })}
                             </div>
                             <div className={styles.ficheCoffeeRow}>
                                 <Coffee size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />

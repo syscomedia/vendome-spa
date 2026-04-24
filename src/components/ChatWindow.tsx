@@ -42,66 +42,124 @@ export default function ChatWindow({
     const eventSourceRef = useRef<EventSource | null>(null);
 
     const clientId = currentUserRole === 'admin' ? otherUserId : currentUserId;
+    const lastMessageIdRef = useRef<number>(0);
 
     const fetchMessages = useCallback(async () => {
         try {
             const res = await fetch(`/api/chat/messages?userId=${clientId}&adminId=${adminId}`);
             const data = await res.json();
-            if (data.messages) setMessages(data.messages);
+            if (data.messages) {
+                setMessages(data.messages);
+                if (data.messages.length > 0) {
+                    lastMessageIdRef.current = data.messages[data.messages.length - 1].id;
+                }
+            }
         } catch {}
         setLoading(false);
     }, [clientId, adminId]);
 
+    const markAsRead = useCallback(() => {
+        fetch('/api/chat/messages', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ readerId: currentUserId, clientId }),
+        }).then(() => {
+            if (onUnreadChange) onUnreadChange(0);
+        });
+    }, [currentUserId, clientId, onUnreadChange]);
+
     useEffect(() => {
         fetchMessages();
         inputRef.current?.focus();
-    }, [fetchMessages]);
+        markAsRead();
+    }, [fetchMessages, markAsRead]);
 
-    // SSE connection
+    // SSE connection for real-time messages
     useEffect(() => {
         const role = currentUserRole === 'admin' ? 'admin' : 'client';
-        const es = new EventSource(`/api/chat/sse?userId=${currentUserId}&role=${role}`);
-        eventSourceRef.current = es;
+        let es: EventSource;
+        let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+        let closed = false;
 
-        es.onmessage = (e) => {
-            try {
-                const data = JSON.parse(e.data);
-                if (data.type === 'new_message') {
-                    const msg: Message = data.message;
-                    // Only add if it's part of this conversation
-                    const isThisConversation =
-                        (msg.sender_id === currentUserId && Number(msg.sender_id !== currentUserId ? otherUserId : 0) === otherUserId) ||
-                        msg.sender_id === otherUserId ||
-                        msg.sender_id === currentUserId;
+        const connect = () => {
+            if (closed) return;
+            es = new EventSource(`/api/chat/sse?userId=${currentUserId}&role=${role}`);
+            eventSourceRef.current = es;
 
-                    if (isThisConversation) {
-                        setMessages(prev => {
-                            // avoid duplicates
-                            if (prev.find(m => m.id === msg.id)) return prev;
-                            return [...prev, msg];
-                        });
-                        // Mark as read if we're the receiver
-                        if (msg.sender_id !== currentUserId) {
+            es.onmessage = (e) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.type === 'new_message') {
+                        const msg: Message = data.message;
+                        const fromOther = msg.sender_id === otherUserId;
+                        // Only add messages FROM the other person — own messages handled by optimistic UI
+                        if (fromOther) {
+                            setMessages(prev => {
+                                if (prev.find(m => m.id === msg.id)) return prev;
+                                lastMessageIdRef.current = msg.id;
+                                return [...prev, msg];
+                            });
+                            // Mark as read since we received it while the window is open
                             fetch('/api/chat/messages', {
                                 method: 'PATCH',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ senderId: otherUserId, receiverId: currentUserId }),
+                                body: JSON.stringify({ readerId: currentUserId, clientId }),
                             });
+                            if (onUnreadChange) onUnreadChange(0);
+                        }
+                    } else if (data.type === 'messages_read') {
+                        // The client has read our messages — flip all our sent messages to is_read=true
+                        const readClientId = data.clientId;
+                        if (readClientId === clientId || readClientId === otherUserId || readClientId === currentUserId) {
+                            setMessages(prev => prev.map(m =>
+                                m.sender_id === currentUserId ? { ...m, is_read: true } : m
+                            ));
                         }
                     }
+                } catch {}
+            };
+
+            es.onerror = () => {
+                es.close();
+                if (!closed) {
+                    reconnectTimer = setTimeout(connect, 3000);
                 }
-            } catch {}
+            };
         };
 
-        es.onerror = () => { es.close(); };
+        connect();
 
-        return () => { es.close(); };
-    }, [currentUserId, currentUserRole, otherUserId]);
+        return () => {
+            closed = true;
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            eventSourceRef.current?.close();
+        };
+    }, [currentUserId, currentUserRole, otherUserId, onUnreadChange]);
 
-    // Scroll to bottom on new messages
+    // Polling fallback: re-fetch messages every 5s to catch anything SSE missed
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`/api/chat/messages?userId=${clientId}&adminId=${adminId}`);
+                const data = await res.json();
+                if (data.messages) {
+                    setMessages(prev => {
+                        // Keep any optimistic messages (large temp IDs) that aren't yet confirmed
+                        const optimistics = prev.filter(m => !data.messages.find((s: Message) => s.id === m.id) && m.id > 1e10);
+                        return [...data.messages, ...optimistics];
+                    });
+                }
+            } catch {}
+        }, 5000);
+        return () => clearInterval(interval);
+    }, [clientId, adminId]);
+
+    // Scroll to bottom on new messages or when chat first loads
+    useEffect(() => {
+        if (!loading) {
+            bottomRef.current?.scrollIntoView({ behavior: messages.length > 1 ? 'smooth' : 'instant' });
+        }
+    }, [messages, loading]);
 
     const send = async () => {
         if (!input.trim() || sending) return;

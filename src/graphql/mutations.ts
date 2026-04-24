@@ -43,11 +43,12 @@ export const SYNC_GOOGLE_USER_MUTATION = gql`
 `;
 
 export const CREATE_RESERVATION_MUTATION = gql`
-  mutation CreateReservation($userId: ID!, $serviceId: ID!, $prestataireId: ID!, $date: String!) {
-    createReservation(userId: $userId, serviceId: $serviceId, prestataireId: $prestataireId, date: $date) {
+  mutation CreateReservation($userId: ID!, $serviceId: ID!, $prestataireId: ID!, $date: String!, $totalPrice: Float, $genre: String) {
+    createReservation(userId: $userId, serviceId: $serviceId, prestataireId: $prestataireId, date: $date, totalPrice: $totalPrice, genre: $genre) {
       id
       date
       status
+      genre
     }
   }
 `;
@@ -71,9 +72,25 @@ export const ADD_TIP_MUTATION = gql`
   }
 `;
 
-export const APPLY_REFERRAL_MUTATION = gql`
-  mutation ApplyReferral($userId: ID!, $code: String!) {
-    applyReferral(userId: $userId, code: $code)
+export const APPLY_REFERRAL_CODE_MUTATION = gql`
+  mutation ApplyReferralCode($userId: ID!, $code: String!) {
+    applyReferralCode(userId: $userId, code: $code) {
+      id
+      referral_code
+      referred_by {
+        id
+        name
+      }
+    }
+  }
+`;
+
+export const GENERATE_REFERRAL_CODE_MUTATION = gql`
+  mutation GenerateReferralCode($userId: ID!) {
+    generateReferralCode(userId: $userId) {
+      id
+      referral_code
+    }
   }
 `;
 
@@ -119,12 +136,40 @@ export const REMOVE_USER_MUTATION = gql`
   }
 `;
 export const ADD_SERVICE_MUTATION = gql`
-  mutation AddService($name: String!, $description: String!, $price: Float!, $image: String!, $duration: String!) {
-    addService(name: $name, description: $description, price: $price, image: $image, duration: $duration) {
+  mutation AddService($name: String!, $description: String!, $price: Float!, $price_homme: Float, $price_femme: Float, $image: String!, $duration: String!, $visibility: String, $categoryId: ID) {
+    addService(name: $name, description: $description, price: $price, price_homme: $price_homme, price_femme: $price_femme, image: $image, duration: $duration, visibility: $visibility, categoryId: $categoryId) {
       id
       name
       enabled
+      price_homme
+      price_femme
+      visibility
+      categoryId
     }
+  }
+`;
+
+export const ADD_SERVICE_CATEGORY_MUTATION = gql`
+  mutation AddServiceCategory($name: String!) {
+    addServiceCategory(name: $name) {
+      id
+      name
+    }
+  }
+`;
+
+export const UPDATE_SERVICE_CATEGORY_MUTATION = gql`
+  mutation UpdateServiceCategory($id: ID!, $name: String!) {
+    updateServiceCategory(id: $id, name: $name) {
+      id
+      name
+    }
+  }
+`;
+
+export const REMOVE_SERVICE_CATEGORY_MUTATION = gql`
+  mutation RemoveServiceCategory($id: ID!) {
+    removeServiceCategory(id: $id)
   }
 `;
 
@@ -154,15 +199,19 @@ export const UPDATE_USER_MUTATION = gql`
 `;
 
 export const UPDATE_SERVICE_MUTATION = gql`
-  mutation UpdateService($id: ID!, $name: String, $description: String, $price: Float, $image: String, $duration: String) {
-    updateService(id: $id, name: $name, description: $description, price: $price, image: $image, duration: $duration) {
+  mutation UpdateService($id: ID!, $name: String, $description: String, $price: Float, $price_homme: Float, $price_femme: Float, $image: String, $duration: String, $visibility: String, $categoryId: ID) {
+    updateService(id: $id, name: $name, description: $description, price: $price, price_homme: $price_homme, price_femme: $price_femme, image: $image, duration: $duration, visibility: $visibility, categoryId: $categoryId) {
       id
       name
       description
       price
+      price_homme
+      price_femme
       image
       duration
       enabled
+      visibility
+      categoryId
     }
   }
 `;
@@ -207,8 +256,8 @@ export const UPDATE_RESERVATION_STATUS_MUTATION = gql`
 `;
 
 export const UPDATE_SPECIALIST_MUTATION = gql`
-  mutation UpdateSpecialist($id: ID!, $name: String, $role: String, $image: String, $specialty: String, $rating: Float, $historique: String, $satisfied_clients: String, $tech_expertise: Int, $hosp_expertise: Int, $prec_expertise: Int, $award_badge: String, $calendar_color_id: String) {
-    updateSpecialist(id: $id, name: $name, role: $role, image: $image, specialty: $specialty, rating: $rating, historique: $historique, satisfied_clients: $satisfied_clients, tech_expertise: $tech_expertise, hosp_expertise: $hosp_expertise, prec_expertise: $prec_expertise, award_badge: $award_badge, calendar_color_id: $calendar_color_id) {
+  mutation UpdateSpecialist($id: ID!, $name: String, $role: String, $image: String, $specialty: String, $rating: Float, $historique: String, $satisfied_clients: String, $tech_expertise: Int, $hosp_expertise: Int, $prec_expertise: Int, $award_badge: String, $calendar_color_id: String, $serviceId: ID) {
+    updateSpecialist(id: $id, name: $name, role: $role, image: $image, specialty: $specialty, rating: $rating, historique: $historique, satisfied_clients: $satisfied_clients, tech_expertise: $tech_expertise, hosp_expertise: $hosp_expertise, prec_expertise: $prec_expertise, award_badge: $award_badge, calendar_color_id: $calendar_color_id, serviceId: $serviceId) {
       id
       name
       role
@@ -222,13 +271,14 @@ export const UPDATE_SPECIALIST_MUTATION = gql`
       prec_expertise
       award_badge
       calendar_color_id
+      service_id
     }
   }
 `;
 
 export const ADD_PRESTATAIRE_MUTATION = gql`
-  mutation AddPrestataire($name: String!, $role: String!, $image: String!, $rating: Float!, $specialty: String!, $satisfied_clients: String, $tech_expertise: Int, $hosp_expertise: Int, $prec_expertise: Int, $award_badge: String, $calendar_color_id: String) {
-    addPrestataire(name: $name, role: $role, image: $image, rating: $rating, specialty: $specialty, satisfied_clients: $satisfied_clients, tech_expertise: $tech_expertise, hosp_expertise: $hosp_expertise, prec_expertise: $prec_expertise, award_badge: $award_badge, calendar_color_id: $calendar_color_id) {
+  mutation AddPrestataire($name: String!, $role: String!, $image: String!, $rating: Float!, $specialty: String!, $satisfied_clients: String, $tech_expertise: Int, $hosp_expertise: Int, $prec_expertise: Int, $award_badge: String, $calendar_color_id: String, $serviceId: ID) {
+    addPrestataire(name: $name, role: $role, image: $image, rating: $rating, specialty: $specialty, satisfied_clients: $satisfied_clients, tech_expertise: $tech_expertise, hosp_expertise: $hosp_expertise, prec_expertise: $prec_expertise, award_badge: $award_badge, calendar_color_id: $calendar_color_id, serviceId: $serviceId) {
       id
       name
       role
@@ -241,6 +291,7 @@ export const ADD_PRESTATAIRE_MUTATION = gql`
       prec_expertise
       award_badge
       calendar_color_id
+      service_id
     }
   }
 `;

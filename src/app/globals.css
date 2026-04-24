@@ -152,3 +152,8 @@ h4 {
 .animate-float {
   animation: float 6s ease-in-out infinite;
 }
+
+/* SweetAlert Z-Index Fix */
+.swal2-container {
+  z-index: 99999 !important;
+}

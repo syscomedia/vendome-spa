@@ -6,9 +6,20 @@ export const typeDefs = gql`
     name: String!
     description: String!
     price: Float!
-    image: String!
+    price_homme: Float
+    price_femme: Float
+    image: String
     duration: String!
     enabled: Boolean
+    visibility: String
+    categoryId: ID
+    category: ServiceCategory
+  }
+
+  type ServiceCategory {
+    id: ID!
+    name: String!
+    services: [Service!]
   }
 
   type Prestataire {
@@ -25,6 +36,8 @@ export const typeDefs = gql`
     prec_expertise: Int
     award_badge: String
     calendar_color_id: String
+    service_id: ID
+    service: Service
     evaluations: [Evaluation!]
   }
 
@@ -37,6 +50,8 @@ export const typeDefs = gql`
     points: Int!
     tier: String!
     nextReward: Int!
+    referral_code: String
+    referred_by: User
   }
 
   type ServiceHistory {
@@ -76,6 +91,8 @@ export const typeDefs = gql`
     last_visit_notes: String
     image: String
     is_blocked: Boolean
+    referral_code: String
+    referred_by: User
   }
 
   type AuthPayload {
@@ -91,6 +108,13 @@ export const typeDefs = gql`
     image: String!
   }
 
+  type Drink {
+    id: ID!
+    name: String!
+    image: String
+    available: Boolean
+  }
+
   type Reservation {
     id: ID!
     user: User
@@ -98,9 +122,13 @@ export const typeDefs = gql`
     prestataire: Prestataire
     date: String!
     status: String!
+    duration: Int
+    total_price: Float
     paymentMode: String
     externalTitle: String
     google_event_id: String
+    drink_choice: String
+    genre: String
   }
 
   type ClientNote {
@@ -130,7 +158,7 @@ export const typeDefs = gql`
   type Query {
     services: [Service!]!
     service(id: ID!): Service
-    prestataires: [Prestataire!]!
+    prestataires(serviceId: ID): [Prestataire!]!
     prestataire(id: ID!): Prestataire
     amenities: [Amenity!]!
     userLoyalty(userId: ID): UserLoyalty!
@@ -144,6 +172,8 @@ export const typeDefs = gql`
     personnelEvaluations: [Evaluation!]!
     clientNotes(clientId: ID): [ClientNote!]!
     externalEvents: [ExternalEvent!]!
+    allDrinks: [Drink!]!
+    serviceCategories: [ServiceCategory!]!
   }
 
   type Evaluation {
@@ -156,25 +186,29 @@ export const typeDefs = gql`
   }
 
   type Mutation {
-    addService(name: String!, description: String!, price: Float!, image: String!, duration: String!): Service!
-    addPrestataire(name: String!, role: String!, image: String!, rating: Float!, specialty: String!, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String): Prestataire!
+    addService(name: String!, description: String!, price: Float!, price_homme: Float, price_femme: Float, image: String, duration: String!, visibility: String, categoryId: ID): Service!
+    addServiceCategory(name: String!): ServiceCategory!
+    addPrestataire(name: String!, role: String!, image: String!, rating: Float!, specialty: String!, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String, serviceId: ID): Prestataire!
     login(email: String!, password: String!): AuthPayload!
     register(email: String!, password: String!, name: String!): AuthPayload!
     syncGoogleUser(email: String!, name: String!): AuthPayload!
-    createReservation(userId: ID!, serviceId: ID!, prestataireId: ID!, date: String!): Reservation!
+    createReservation(userId: ID!, serviceId: ID!, prestataireId: ID!, date: String!, duration: Int, totalPrice: Float, genre: String): Reservation!
     addWaitingComment(userId: ID!, comment: String!): WaitingComment!
     addTip(userId: ID!, prestataireId: ID!, amount: Float!): Boolean
     convertExternalToReservation(externalId: ID!, userId: ID!, serviceId: ID!, prestataireId: ID!): Reservation!
-    applyReferral(userId: ID!, code: String!): Boolean
+    generateReferralCode(userId: ID!): User!
+    applyReferralCode(userId: ID!, code: String!): User!
     addPersonnelEvaluation(userId: ID!, personnelId: ID!, rating: Int!, comment: String!): Boolean
     deleteReservation(id: ID!): Boolean
     toggleService(id: ID!, enabled: Boolean!): Service!
     removeService(id: ID!): Boolean
-    updateService(id: ID!, name: String, description: String, price: Float, image: String, duration: String): Service!
+    updateService(id: ID!, name: String, description: String, price: Float, price_homme: Float, price_femme: Float, image: String, duration: String, visibility: String, categoryId: ID): Service!
+    updateServiceCategory(id: ID!, name: String!): ServiceCategory!
+    removeServiceCategory(id: ID!): Boolean!
     updateUserRole(userId: ID!, role: String!): User!
     updateUser(userId: ID!, email: String, name: String, role: String, password: String, tier: String, hair_color_pref: String, favorite_coupe: String, nail_color_pref: String, music_pref: String, music_link: String, drink_pref: String, skin_type: String, birthday: String, phone: String, coffee_pref: String, employee_pref: String, favourite_service: String, allergies: String, last_visit_notes: String, image: String, is_blocked: Boolean): User!
     removeUser(userId: ID!): Boolean
-    updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String): Prestataire!
+    updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String, serviceId: ID): Prestataire!
     addProduct(name: String!, description: String!, price: Float!, image: String!): Product!
     updateProduct(id: ID!, name: String, description: String, price: Float, image: String): Product!
     removeProduct(id: ID!): Boolean
@@ -185,5 +219,8 @@ export const typeDefs = gql`
     deleteSpecialist(id: ID!): Boolean
     deductPoints(userId: ID!, points: Int!): User!
     purchaseProduct(userId: ID!, productId: ID!): Boolean
+    addDrink(name: String!, image: String): Drink!
+    removeDrink(id: ID!): Boolean
+    updateReservationDrink(id: ID!, drinkChoice: String!): Reservation!
   }
 `;

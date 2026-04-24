@@ -1,6 +1,6 @@
 import { query } from '@/lib/db';
-import { 
-    createGoogleCalendarEvent, 
+import {
+    createGoogleCalendarEvent,
     listGoogleCalendarEvents,
     getAuthorizedGoogleClient
 } from '@/lib/google-calendar';
@@ -10,7 +10,13 @@ export const resolvers = {
         services: async () => {
             try {
                 const res = await query('SELECT * FROM services');
-                return res.rows.map(row => ({ ...row, price: parseFloat(row.price) }));
+                return res.rows.map(row => ({ 
+                    ...row, 
+                    price: parseFloat(row.price) || 0,
+                    price_homme: parseFloat(row.price_homme) || 0,
+                    price_femme: parseFloat(row.price_femme) || 0,
+                    categoryId: row.category_id 
+                }));
             } catch (e) {
                 console.error('Error fetching services:', e);
                 return [];
@@ -21,16 +27,31 @@ export const resolvers = {
                 const res = await query('SELECT * FROM services WHERE id = $1', [id]);
                 const row = res.rows[0];
                 if (!row) return null;
-                return { ...row, price: parseFloat(row.price) };
+                return { 
+                    ...row, 
+                    price: parseFloat(row.price) || 0,
+                    price_homme: parseFloat(row.price_homme) || 0,
+                    price_femme: parseFloat(row.price_femme) || 0,
+                    categoryId: row.category_id
+                };
             } catch (e) {
                 console.error('Error fetching service:', e);
                 return null;
             }
         },
-        prestataires: async () => {
+        prestataires: async (_: any, { serviceId }: any) => {
             try {
-                const res = await query('SELECT id, name, role, image, rating, specialty, historique, calendar_color_id FROM specialistes');
-                return res.rows;
+                let queryText = 'SELECT id, name, role, image, rating, specialty, historique, calendar_color_id, service_id FROM specialistes';
+                const values: any[] = [];
+                if (serviceId) {
+                    queryText += ' WHERE service_id = $1';
+                    values.push(serviceId);
+                }
+                const res = await query(queryText, values);
+                return res.rows.map(row => ({
+                    ...row,
+                    service_id: row.service_id
+                }));
             } catch (e) {
                 console.error('Error fetching specialists:', e);
                 return [];
@@ -38,8 +59,13 @@ export const resolvers = {
         },
         prestataire: async (_: any, { id }: any) => {
             try {
-                const res = await query('SELECT id, name, role, image, rating, specialty, historique, calendar_color_id FROM specialistes WHERE id = $1', [id]);
-                return res.rows[0];
+                const res = await query('SELECT id, name, role, image, rating, specialty, historique, calendar_color_id, service_id FROM specialistes WHERE id = $1', [id]);
+                const row = res.rows[0];
+                if (!row) return null;
+                return {
+                    ...row,
+                    service_id: row.service_id
+                };
             } catch (e) {
                 console.error('Error fetching specialist:', e);
                 return null;
@@ -59,18 +85,20 @@ export const resolvers = {
                 if (!userId) {
                     return { points: 0, tier: 'Guest', nextReward: 100 };
                 }
-                const res = await query('SELECT points, tier FROM users WHERE id = $1', [userId]);
+                const res = await query('SELECT points, tier, referral_code, referred_by_id FROM users WHERE id = $1', [userId]);
                 const user = res.rows[0];
                 if (!user) return { points: 0, tier: 'Guest', nextReward: 100 };
-                
+
                 const points = parseInt(user.points) || 0;
                 // Calculate next reward: let's say every 500 points
                 const nextRewardValue = 500 - (points % 500);
 
-                return { 
-                    points: points, 
-                    tier: user.tier || 'Guest', 
-                    nextReward: nextRewardValue 
+                return {
+                    points: points,
+                    tier: user.tier || 'Guest',
+                    nextReward: nextRewardValue,
+                    referral_code: user.referral_code,
+                    referred_by_id: user.referred_by_id
                 };
             } catch (e) {
                 console.error('Error fetching user loyalty:', e);
@@ -101,8 +129,11 @@ export const resolvers = {
         },
         clients: async () => {
             try {
-                const res = await query("SELECT id, email, name, role, points, tier, password, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image, is_blocked FROM users ORDER BY name ASC");
-                return res.rows;
+                const res = await query("SELECT id, email, name, role, points, tier, password, hair_color_pref, favorite_coupe, nail_color_pref, music_pref, music_link, drink_pref, skin_type, birthday, phone, coffee_pref, employee_pref, favourite_service, allergies, last_visit_notes, image, is_blocked, referral_code, referred_by_id FROM users ORDER BY name ASC");
+                return res.rows.map(row => ({
+                    ...row,
+                    referred_by_id: row.referred_by_id
+                }));
             } catch (e) {
                 console.error('Error fetching clients:', e);
                 return [];
@@ -121,9 +152,9 @@ export const resolvers = {
             try {
                 let queryText = `
                     SELECT 
-                        r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode",
-                        json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
-                        json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration, 'description', s.description) as service,
+                        r.id, r.date, r.status, r.duration, r.total_price, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode", r.drink_choice, r.genre,
+                        json_build_object('id', u.id, 'name', u.name, 'email', u.email, 'drink_pref', u.drink_pref) as user,
+                        json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration, 'description', s.description, 'visibility', s.visibility) as service,
                         json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty, 'calendar_color_id', p.calendar_color_id) as prestataire
                     FROM reservations r
                     LEFT JOIN users u ON r.user_id = u.id
@@ -141,6 +172,8 @@ export const resolvers = {
                 return res.rows.map(row => ({
                     ...row,
                     date: row.date ? new Date(row.date).toISOString() : null,
+                    duration: row.duration,
+                    total_price: row.total_price ? parseFloat(row.total_price.toString()) : 0,
                     user: row.user?.id ? row.user : null,
                     service: row.service?.id ? {
                         ...row.service,
@@ -227,6 +260,53 @@ export const resolvers = {
                 return [];
             }
         },
+        allDrinks: async () => {
+            try {
+                const res = await query('SELECT * FROM drinks WHERE available = TRUE ORDER BY name ASC');
+                return res.rows;
+            } catch (e) {
+                console.error('Error fetching drinks:', e);
+                return [];
+            }
+        },
+        serviceCategories: async () => {
+            try {
+                const res = await query('SELECT * FROM service_categories ORDER BY name ASC');
+                return res.rows;
+            } catch (e) {
+                console.error('Error fetching service categories:', e);
+                return [];
+            }
+        }
+    },
+    Service: {
+        category: async (parent: any) => {
+            if (!parent.categoryId) return null;
+            try {
+                const res = await query('SELECT * FROM service_categories WHERE id = $1', [parent.categoryId]);
+                return res.rows[0];
+            } catch (e) {
+                console.error(e);
+                return null;
+            }
+        }
+    },
+    ServiceCategory: {
+        services: async (parent: any) => {
+            try {
+                const res = await query('SELECT * FROM services WHERE category_id = $1', [parent.id]);
+                return res.rows.map((row: any) => ({ 
+                    ...row, 
+                    price: parseFloat(row.price) || 0,
+                    price_homme: parseFloat(row.price_homme) || 0,
+                    price_femme: parseFloat(row.price_femme) || 0,
+                    categoryId: row.category_id 
+                }));
+            } catch (e) {
+                console.error(e);
+                return [];
+            }
+        }
     },
     ClientNote: {
         client: async (parent: any) => {
@@ -250,6 +330,32 @@ export const resolvers = {
                 ORDER BY e.created_at DESC
             `, [parent.id]);
             return res.rows;
+        },
+        service: async (parent: any) => {
+            if (!parent.service_id) return null;
+            const res = await query('SELECT * FROM services WHERE id = $1', [parent.service_id]);
+            const row = res.rows[0];
+            if (!row) return null;
+            return { 
+                ...row, 
+                price: parseFloat(row.price) || 0,
+                price_homme: parseFloat(row.price_homme) || 0,
+                price_femme: parseFloat(row.price_femme) || 0
+            };
+        }
+    },
+    UserLoyalty: {
+        referred_by: async (parent: any) => {
+            if (!parent.referred_by_id) return null;
+            const res = await query('SELECT id, email, name, role, image FROM users WHERE id = $1', [parent.referred_by_id]);
+            return res.rows[0];
+        }
+    },
+    User: {
+        referred_by: async (parent: any) => {
+            if (!parent.referred_by_id) return null;
+            const res = await query('SELECT id, email, name, role, image FROM users WHERE id = $1', [parent.referred_by_id]);
+            return res.rows[0];
         }
     },
     Mutation: {
@@ -331,19 +437,19 @@ export const resolvers = {
                 return { error: 'Server error during Google Sync' };
             }
         },
-        createReservation: async (_: any, { userId, serviceId, prestataireId, date }: any) => {
+        createReservation: async (_: any, { userId, serviceId, prestataireId, date, duration, totalPrice, genre }: any) => {
             try {
                 const res = await query(
-                    `INSERT INTO reservations (user_id, service_id, prestataire_id, date) 
-                     VALUES ($1, $2, $3, $4) RETURNING id, date, status`,
-                    [userId, serviceId, prestataireId, date]
+                    `INSERT INTO reservations (user_id, service_id, prestataire_id, date, duration, total_price, genre) 
+                     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, date, status`,
+                    [userId, serviceId, prestataireId, date, duration, totalPrice, genre]
                 );
                 // We need to return the full graph. For simplicity, fetch it back or construct it.
                 // Fetching is safer.
                 const fullRes = await query(`
                     SELECT 
-                        r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode",
-                        json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
+                        r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode", r.duration, r.total_price, r.drink_choice, r.genre,
+                        json_build_object('id', u.id, 'name', u.name, 'email', u.email, 'drink_pref', u.drink_pref) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
                         json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty, 'calendar_color_id', p.calendar_color_id) as prestataire
                     FROM reservations r
@@ -379,34 +485,59 @@ export const resolvers = {
             );
             return true;
         },
-        applyReferral: async (_: any, { userId, code }: any) => {
+        generateReferralCode: async (_: any, { userId }: any) => {
+            const userRes = await query('SELECT referral_code FROM users WHERE id = $1', [userId]);
+            if (userRes.rows[0]?.referral_code) {
+                const res = await query('SELECT * FROM users WHERE id = $1', [userId]);
+                return res.rows[0];
+            }
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+            await query('UPDATE users SET referral_code = $1 WHERE id = $2', [code, userId]);
+            const res = await query('SELECT * FROM users WHERE id = $1', [userId]);
+            return res.rows[0];
+        },
+        applyReferralCode: async (_: any, { userId, code }: any) => {
             // Find owner of code
             const ownerRes = await query('SELECT id FROM users WHERE referral_code = $1', [code]);
-            if (ownerRes.rows.length === 0) return false;
+            if (ownerRes.rows.length === 0) throw new Error('Code invalide');
             const ownerId = ownerRes.rows[0].id;
 
-            if (parseInt(ownerId) === parseInt(userId)) return false; // Self referral
+            if (String(ownerId) === String(userId)) throw new Error('Auto-parrainage impossible');
 
-            // Update points
-            await query('UPDATE users SET points = points + 10 WHERE id = $1', [ownerId]);
             // Mark user as referred
-            await query('UPDATE users SET referred_by = $1 WHERE id = $2', [code, userId]);
+            await query('UPDATE users SET referred_by_id = $1 WHERE id = $2', [ownerId, userId]);
 
-            return true;
+            const res = await query('SELECT * FROM users WHERE id = $1', [userId]);
+            return res.rows[0];
         },
-        addService: async (_: any, { name, description, price, image, duration }: any) => {
+        addService: async (_: any, { name, description, price, price_homme, price_femme, image, duration, visibility, categoryId }: any) => {
             const res = await query(
-                'INSERT INTO services (name, description, price, image, duration) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-                [name, description, price, image, duration]
+                'INSERT INTO services (name, description, price, price_homme, price_femme, image, duration, visibility, category_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id, name, description, price, price_homme, price_femme, image, duration, enabled, visibility, category_id as "categoryId"',
+                [name, description, price, price_homme, price_femme, image, duration, visibility || 'both', categoryId]
+            );
+            return {
+                ...res.rows[0],
+                price: parseFloat(res.rows[0].price) || 0,
+                price_homme: parseFloat(res.rows[0].price_homme) || 0,
+                price_femme: parseFloat(res.rows[0].price_femme) || 0
+            };
+        },
+        addServiceCategory: async (_: any, { name }: any) => {
+            const res = await query(
+                'INSERT INTO service_categories (name) VALUES ($1) RETURNING *',
+                [name]
             );
             return res.rows[0];
         },
-        addPrestataire: async (_: any, { name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id }: any) => {
+        addPrestataire: async (_: any, { name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceId }: any) => {
             const res = await query(
-                'INSERT INTO specialistes (name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING *',
-                [name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id]
+                'INSERT INTO specialistes (name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, service_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
+                [name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceId]
             );
-            return res.rows[0];
+            return {
+                ...res.rows[0],
+                service_id: res.rows[0].service_id
+            };
         },
         addPersonnelEvaluation: async (_: any, { userId, personnelId, rating, comment }: any) => {
             try {
@@ -434,13 +565,18 @@ export const resolvers = {
                 'UPDATE services SET enabled = $1 WHERE id = $2 RETURNING *',
                 [enabled, id]
             );
-            return { ...res.rows[0], price: parseFloat(res.rows[0].price) };
+            return { 
+                ...res.rows[0], 
+                price: parseFloat(res.rows[0].price) || 0,
+                price_homme: parseFloat(res.rows[0].price_homme) || 0,
+                price_femme: parseFloat(res.rows[0].price_femme) || 0
+            };
         },
         removeService: async (_: any, { id }: any) => {
             await query('DELETE FROM services WHERE id = $1', [id]);
             return true;
         },
-        updateService: async (_: any, { id, name, description, price, image, duration }: any) => {
+        updateService: async (_: any, { id, name, description, price, price_homme, price_femme, image, duration, visibility, categoryId }: any) => {
             try {
                 let queryText = 'UPDATE services SET ';
                 const values: any[] = [];
@@ -458,6 +594,14 @@ export const resolvers = {
                     updates.push(`price = $${values.length + 1}`);
                     values.push(price);
                 }
+                if (price_homme !== undefined) {
+                    updates.push(`price_homme = $${values.length + 1}`);
+                    values.push(price_homme);
+                }
+                if (price_femme !== undefined) {
+                    updates.push(`price_femme = $${values.length + 1}`);
+                    values.push(price_femme);
+                }
                 if (image !== undefined) {
                     updates.push(`image = $${values.length + 1}`);
                     values.push(image);
@@ -466,20 +610,57 @@ export const resolvers = {
                     updates.push(`duration = $${values.length + 1}`);
                     values.push(duration);
                 }
+                if (visibility !== undefined) {
+                    updates.push(`visibility = $${values.length + 1}`);
+                    values.push(visibility);
+                }
+                if (categoryId !== undefined) {
+                    updates.push(`category_id = $${values.length + 1}`);
+                    values.push(categoryId);
+                }
 
                 if (updates.length === 0) {
                     const res = await query('SELECT * FROM services WHERE id = $1', [id]);
-                    return { ...res.rows[0], price: parseFloat(res.rows[0].price) };
+                    return {
+                        ...res.rows[0],
+                        price: parseFloat(res.rows[0].price),
+                        price_homme: parseFloat(res.rows[0].price_homme),
+                        price_femme: parseFloat(res.rows[0].price_femme)
+                    };
                 }
 
                 queryText += updates.join(', ') + ` WHERE id = $${values.length + 1} RETURNING *`;
                 values.push(id);
 
                 const res = await query(queryText, values);
-                return { ...res.rows[0], price: parseFloat(res.rows[0].price) };
+                return {
+                    ...res.rows[0],
+                    price: parseFloat(res.rows[0].price) || 0,
+                    price_homme: parseFloat(res.rows[0].price_homme) || 0,
+                    price_femme: parseFloat(res.rows[0].price_femme) || 0,
+                    categoryId: res.rows[0].category_id
+                };
             } catch (e) {
                 console.error('Update service error:', e);
                 throw new Error("Failed to update service");
+            }
+        },
+        updateServiceCategory: async (_: any, { id, name }: any) => {
+            const res = await query(
+                'UPDATE service_categories SET name = $1 WHERE id = $2 RETURNING *',
+                [name, id]
+            );
+            return res.rows[0];
+        },
+        removeServiceCategory: async (_: any, { id }: any) => {
+            try {
+                // Set category_id to null for services in this category
+                await query('UPDATE services SET category_id = NULL WHERE category_id = $1', [id]);
+                await query('DELETE FROM service_categories WHERE id = $1', [id]);
+                return true;
+            } catch (e) {
+                console.error(e);
+                return false;
             }
         },
         updateUserRole: async (_: any, { userId, role }: any) => {
@@ -648,7 +829,7 @@ export const resolvers = {
             await query('DELETE FROM products WHERE id = $1', [id]);
             return true;
         },
-        updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id }: any) => {
+        updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceId }: any) => {
             try {
                 let queryText = 'UPDATE specialistes SET ';
                 const values: any[] = [];
@@ -657,7 +838,7 @@ export const resolvers = {
                 if (name !== undefined) { updates.push(`name = $${values.length + 1}`); values.push(name); }
                 if (role !== undefined) { updates.push(`role = $${values.length + 1}`); values.push(role); }
                 if (image !== undefined) { updates.push(`image = $${values.length + 1}`); values.push(image); }
-                if (specialty) { updates.push(`specialty = $${values.length + 1}`); values.push(specialty); }
+                if (specialty !== undefined) { updates.push(`specialty = $${values.length + 1}`); values.push(specialty); }
                 if (rating !== undefined) { updates.push(`rating = $${values.length + 1}`); values.push(rating); }
                 if (historique !== undefined) { updates.push(`historique = $${values.length + 1}`); values.push(historique); }
                 if (satisfied_clients !== undefined) { updates.push(`satisfied_clients = $${values.length + 1}`); values.push(satisfied_clients); }
@@ -666,17 +847,18 @@ export const resolvers = {
                 if (prec_expertise !== undefined) { updates.push(`prec_expertise = $${values.length + 1}`); values.push(prec_expertise); }
                 if (award_badge !== undefined) { updates.push(`award_badge = $${values.length + 1}`); values.push(award_badge); }
                 if (calendar_color_id !== undefined) { updates.push(`calendar_color_id = $${values.length + 1}`); values.push(calendar_color_id); }
+                if (serviceId !== undefined) { updates.push(`service_id = $${values.length + 1}`); values.push(serviceId); }
 
                 if (updates.length === 0) {
                     const res = await query('SELECT * FROM specialistes WHERE id = $1', [id]);
-                    return res.rows[0];
+                    return { ...res.rows[0], service_id: res.rows[0].service_id };
                 }
 
                 queryText += updates.join(', ') + ` WHERE id = $${values.length + 1} RETURNING *`;
                 values.push(id);
 
                 const res = await query(queryText, values);
-                return res.rows[0];
+                return { ...res.rows[0], service_id: res.rows[0].service_id };
             } catch (e) {
                 console.error('Update specialist error:', e);
                 throw new Error("Failed to update specialist");
@@ -709,17 +891,17 @@ export const resolvers = {
                 const prodRes = await query('SELECT price FROM products WHERE id = $1', [productId]);
                 if (prodRes.rows.length === 0) return false;
                 const price = parseFloat(prodRes.rows[0].price);
-                
+
                 // Calculate points (10 DT = 1 point)
                 const pointsToAdd = Math.floor(price / 10);
-                
+
                 if (pointsToAdd > 0) {
                     await query('UPDATE users SET points = points + $1 WHERE id = $2', [pointsToAdd, userId]);
-                    
+
                     // Add to service_history (optional but good for tracking)
                     // Wait, service_history table might need adjustment for products, but I'll skip for now if not requested.
                 }
-                
+
                 return true;
             } catch (e) {
                 console.error('Error purchasing product:', e);
@@ -735,7 +917,7 @@ export const resolvers = {
                     JOIN services s ON r.service_id = s.id 
                     WHERE r.id = $1
                 `, [id]);
-                
+
                 const oldStatus = currentRes.rows[0]?.status;
                 const servicePrice = parseFloat(currentRes.rows[0]?.price || 0);
                 const userId = currentRes.rows[0]?.user_id;
@@ -747,7 +929,7 @@ export const resolvers = {
                     values.push(paymentMode);
                 }
                 queryText += ' WHERE id = $2 RETURNING id, status, payment_mode as "paymentMode"';
-                
+
                 await query(queryText, values);
 
                 // Add points if status changed to 'confirmed' (consumed)
@@ -756,8 +938,25 @@ export const resolvers = {
                     if (pointsToAdd > 0) {
                         await query('UPDATE users SET points = points + $1 WHERE id = $2', [pointsToAdd, userId]);
                     }
+
+                    // Referral Logic: Check if this is the user's first confirmed reservation
+                    const prevConfirmedRes = await query(
+                        "SELECT id FROM reservations WHERE user_id = $1 AND status = 'confirmed' AND id != $2",
+                        [userId, id]
+                    );
+
+                    if (prevConfirmedRes.rows.length === 0) {
+                        // First one! Check if they were referred
+                        const userRes = await query('SELECT referred_by_id FROM users WHERE id = $1', [userId]);
+                        const referrerId = userRes.rows[0]?.referred_by_id;
+
+                        if (referrerId) {
+                            // Give 10 points to the referrer
+                            await query('UPDATE users SET points = points + 10 WHERE id = $1', [referrerId]);
+                        }
+                    }
                 }
-                
+
                 const fullRes = await query(`
                     SELECT 
                         r.id, r.date, r.status, r.payment_mode as "paymentMode", r.external_title as "externalTitle", r.google_event_id,
@@ -770,7 +969,7 @@ export const resolvers = {
                     LEFT JOIN specialistes p ON r.prestataire_id = p.id
                     WHERE r.id = $1
                 `, [id]);
-                
+
                 const result = {
                     ...fullRes.rows[0],
                     date: fullRes.rows[0].date ? new Date(fullRes.rows[0].date).toISOString() : null
@@ -809,7 +1008,7 @@ export const resolvers = {
                 // Fetch events from 7 days ago to 7 days in the future
                 const timeMin = new Date();
                 timeMin.setDate(timeMin.getDate() - 7);
-                
+
                 const events = await listGoogleCalendarEvents(auth, timeMin.toISOString());
                 console.log(`Found ${events.length} events in Google Calendar`);
                 for (const event of events) {
@@ -894,8 +1093,8 @@ export const resolvers = {
                 // Return full reservation
                 const fullRes = await query(`
                     SELECT 
-                        r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode",
-                        json_build_object('id', u.id, 'name', u.name, 'email', u.email) as user,
+                        r.id, r.date, r.status, r.external_title as "externalTitle", r.google_event_id, r.payment_mode as "paymentMode", r.drink_choice, r.genre,
+                        json_build_object('id', u.id, 'name', u.name, 'email', u.email, 'drink_pref', u.drink_pref) as user,
                         json_build_object('id', s.id, 'name', s.name, 'price', s.price, 'image', s.image, 'duration', s.duration) as service,
                         json_build_object('id', p.id, 'name', p.name, 'role', p.role, 'image', p.image, 'rating', p.rating, 'specialty', p.specialty, 'calendar_color_id', p.calendar_color_id) as prestataire
                     FROM reservations r
@@ -913,6 +1112,35 @@ export const resolvers = {
                 console.error('Error converting event:', e);
                 throw e;
             }
-        }
+        },
+        addDrink: async (_: any, { name, image }: any) => {
+            try {
+                const res = await query('INSERT INTO drinks (name, image) VALUES ($1, $2) RETURNING *', [name, image]);
+                return res.rows[0];
+            } catch (e) {
+                console.error('Error adding drink:', e);
+                throw e;
+            }
+        },
+        removeDrink: async (_: any, { id }: any) => {
+            try {
+                await query('DELETE FROM drinks WHERE id = $1', [id]);
+                return true;
+            } catch (e) {
+                console.error('Error removing drink:', e);
+                return false;
+            }
+        },
+        updateReservationDrink: async (_: any, { id, drinkChoice }: any) => {
+            try {
+                const res = await query('UPDATE reservations SET drink_choice = $1 WHERE id = $2 RETURNING *', [drinkChoice, id]);
+                const row = res.rows[0];
+                if (!row) throw new Error('Reservation not found');
+                return row;
+            } catch (e) {
+                console.error('Error updating reservation drink:', e);
+                throw e;
+            }
+        },
     },
 };
