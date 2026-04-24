@@ -15,6 +15,9 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "Vendôme Beauty & Spa",
   description: "An exclusive experience of beauty and wellness.",
+  icons: {
+    icon: "/ico.png",
+  },
 };
 
 import { LanguageProvider } from "@/lib/LanguageContext";
