@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useLanguage } from '@/lib/LanguageContext';
 import { Language } from '@/lib/mock-data';
 import styles from './page.module.css';
-import { ChevronRight, Globe, Mail, Lock, Sparkles, Users, Eye, EyeOff } from 'lucide-react';
+import { ChevronRight, Mail, Lock, Sparkles, Users, Eye, EyeOff } from 'lucide-react';
 
 import { useSession, signIn, signOut } from "next-auth/react";
 import { useMutation } from '@apollo/client/react';
@@ -14,7 +14,6 @@ import { LOGIN_MUTATION, REGISTER_MUTATION, SYNC_GOOGLE_USER_MUTATION } from '@/
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
-  const [showLang, setShowLang] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -89,13 +88,7 @@ export default function LoginPage() {
     }
   };
 
-  const languages = [
-    { code: 'fr', label: 'Français' },
-    { code: 'ar', label: 'العربية' },
-    { code: 'es', label: 'Español' },
-    { code: 'ru', label: 'Русский' },
-    { code: 'zh', label: '中文' },
-  ];
+
 
   return (
     <div className={styles.container}>
@@ -138,30 +131,7 @@ export default function LoginPage() {
           </motion.p>
         </div>
 
-        <div className={styles.langWrapper} onClick={() => setShowLang(!showLang)}>
-          <Globe className={styles.langIcon} size={18} />
-          <span className={styles.langLabel}>{language.toUpperCase()}</span>
-          <AnimatePresence>
-            {showLang && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10 }}
-                className={styles.langDropdown}
-              >
-                {languages.map((lang) => (
-                  <button
-                    key={lang.code}
-                    className={`${styles.langOption} ${language === lang.code ? styles.langOptionActive : ''}`}
-                    onClick={() => setLanguage(lang.code as Language)}
-                  >
-                    {lang.label}
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+
       </div>
 
       <div className={styles.formSection}>
@@ -244,7 +214,7 @@ export default function LoginPage() {
                   </button>
                 </div>
 
-                {isLogin && <a href="#" className={styles.forgot}>{t('forgot')}</a>}
+
 
                 <button type="submit" className={styles.buttonPremium}>
                   {isLogin ? t('signIn') : t('signUp')}

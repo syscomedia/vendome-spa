@@ -32,7 +32,7 @@ import {
     Award,
     Calendar,
     Layers,
-    Globe,
+
     ArrowUpRight,
     Heart,
     ShoppingBag,
@@ -332,7 +332,6 @@ export default function Dashboard() {
     const [selectedDayLine, setSelectedDayLine] = useState<string>('');
     const [selectedTimeLine, setSelectedTimeLine] = useState<string>('');
     const [currentDisplayMonth, setCurrentDisplayMonth] = useState(new Date());
-    const [showLangMenu, setShowLangMenu] = useState(false);
     const [rating, setRating] = useState(0);
     const [isRatingModalOpen, setIsRatingModalOpen] = useState(false);
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
@@ -435,7 +434,7 @@ export default function Dashboard() {
     const [isEditSpecServiceOpen, setIsEditSpecServiceOpen] = useState(false);
     const [clientSearch, setClientSearch] = useState('');
     const [showReferralsInFiche, setShowReferralsInFiche] = useState(false);
-    const { t, language, setLanguage } = useLanguage();
+    const { t, language } = useLanguage();
 
     const handleAddCategory = async () => {
         if (!newCategoryName.trim()) return;
@@ -1135,49 +1134,7 @@ export default function Dashboard() {
                     </nav>
 
                     <div className={styles.sidebarFooter}>
-                        <div
-                            className={styles.langSwitch}
-                            onClick={() => setShowLangMenu(!showLangMenu)}
-                        >
-                            <Globe size={18} className={styles.langIcon} />
-                            <span className={styles.langLabel}>{language.toUpperCase()}</span>
-                            <motion.div
-                                animate={{ rotate: showLangMenu ? 180 : 0 }}
-                                transition={{ duration: 0.3 }}
-                            >
-                                <ChevronRight size={14} style={{ transform: 'rotate(90deg)' }} />
-                            </motion.div>
-
-                            <AnimatePresence>
-                                {showLangMenu && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                        className={styles.langDropdown}
-                                    >
-                                        {(['fr', 'ar', 'es', 'ru', 'zh'] as Language[]).map((lang) => (
-                                            <button
-                                                key={lang}
-                                                className={`${styles.langOption} ${language === lang ? styles.active : ''}`}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setLanguage(lang);
-                                                    setShowLangMenu(false);
-                                                }}
-                                            >
-                                                {lang.toUpperCase()} — {
-                                                    lang === 'fr' ? 'Français' :
-                                                        lang === 'ar' ? 'العربية' :
-                                                            lang === 'es' ? 'Español' :
-                                                                lang === 'ru' ? 'Русский' : '中文'
-                                                }
-                                            </button>
-                                        ))}
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-                        </div>
+                        {/* Language switcher removed */}
 
                         {user?.role !== 'admin' && (
                             <button

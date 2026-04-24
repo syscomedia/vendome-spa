@@ -17,6 +17,12 @@ export const metadata: Metadata = {
   description: "An exclusive experience of beauty and wellness.",
   icons: {
     icon: "/ico.png",
+    apple: "/ico.png",
+  },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Vendôme Beauty",
   },
 };
 
