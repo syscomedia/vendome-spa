@@ -829,6 +829,13 @@ export const resolvers = {
             await query('DELETE FROM products WHERE id = $1', [id]);
             return true;
         },
+        toggleProduct: async (_: any, { id, is_active }: any) => {
+            const res = await query(
+                'UPDATE products SET is_active = $1 WHERE id = $2 RETURNING *',
+                [is_active, id]
+            );
+            return { ...res.rows[0], price: parseFloat(res.rows[0].price) };
+        },
         updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceId }: any) => {
             try {
                 let queryText = 'UPDATE specialistes SET ';

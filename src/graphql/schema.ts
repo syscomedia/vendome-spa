@@ -106,6 +106,7 @@ export const typeDefs = gql`
     description: String
     price: Float!
     image: String
+    is_active: Boolean
   }
 
   type Drink {
@@ -212,6 +213,7 @@ export const typeDefs = gql`
     addProduct(name: String!, description: String, price: Float!, image: String): Product!
     updateProduct(id: ID!, name: String, description: String, price: Float, image: String): Product!
     removeProduct(id: ID!): Boolean
+    toggleProduct(id: ID!, is_active: Boolean!): Product!
     updateReservationStatus(id: ID!, status: String!, paymentMode: String): Reservation!
     updateReservationDate(id: ID!, date: String!): Reservation!
     syncGoogleCalendar: Boolean!

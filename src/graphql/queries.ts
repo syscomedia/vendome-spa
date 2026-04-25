@@ -145,6 +145,7 @@ export const GET_PRODUCTS = gql`
       description
       price
       image
+      is_active
     }
   }
 `;

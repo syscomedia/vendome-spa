@@ -108,6 +108,7 @@ import {
     ADD_PRODUCT_MUTATION,
     UPDATE_PRODUCT_MUTATION,
     REMOVE_PRODUCT_MUTATION,
+    TOGGLE_PRODUCT_MUTATION,
     UPDATE_RESERVATION_STATUS_MUTATION,
     UPDATE_SPECIALIST_MUTATION,
     REGISTER_MUTATION,
@@ -302,6 +303,7 @@ export default function Dashboard() {
     const [addProduct] = useMutation(ADD_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [updateProduct] = useMutation(UPDATE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [removeProduct] = useMutation(REMOVE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
+    const [toggleProduct, { loading: isTogglingProduct }] = useMutation(TOGGLE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
     const [updateReservationStatus] = useMutation(UPDATE_RESERVATION_STATUS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }, { query: GET_WAITING_DATA, variables: { userId: user?.id } }] });
     const [updateReservationDate] = useMutation(UPDATE_RESERVATION_DATE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
     const [updateSpecialist] = useMutation(UPDATE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
@@ -3130,12 +3132,15 @@ export default function Dashboard() {
                                     )}
                                 </div>
                                 <div className={styles.servicesGrid}>
-                                    {productsData?.products?.map((prod: any) => (
+                                    {productsData?.products?.map((prod: any) => {
+                                        if (user?.role !== 'admin' && prod.is_active === false) return null;
+                                        return (
                                         <motion.div
                                             key={prod.id}
                                             className={styles.serviceCard}
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
+                                            style={{ opacity: prod.is_active === false ? 0.6 : 1 }}
                                         >
                                             <div className={styles.serviceImgWrapper}>
                                                 {prod.image ? (
@@ -3146,16 +3151,22 @@ export default function Dashboard() {
                                                     </div>
                                                 )}
                                                 <div className={styles.servicePrice}>{prod.price} DT</div>
-                                                {/* Admin overlay removed as actions are now at the bottom */}
+                                                {user?.role === 'admin' && (
+                                                    <div style={{ position: 'absolute', top: '25px', insetInlineStart: '25px' }}>
+                                                        <span className={`${styles.serviceStatus} ${prod.is_active !== false ? styles.statusActive : styles.statusDisabled}`}>
+                                                            {prod.is_active !== false ? (t('active') || 'Actif') : (t('disabled') || 'Désactivé')}
+                                                        </span>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div className={styles.serviceInfo}>
                                                 <h3>{prod.name}</h3>
                                                 <p>{prod.description}</p>
                                                 {user?.role === 'admin' ? (
-                                                    <div className={styles.modalActions} style={{ marginTop: '15px' }}>
+                                                    <div className={styles.modalActions} style={{ marginTop: '15px', flexWrap: 'wrap' }}>
                                                         <button
                                                             className={styles.btnSaveLux}
-                                                            style={{ flex: 1 }}
+                                                            style={{ flex: '1 1 120px' }}
                                                             onClick={(e) => {
                                                                 e.stopPropagation();
                                                                 setEditingProduct({ ...prod });
@@ -3165,8 +3176,19 @@ export default function Dashboard() {
                                                             {t('edit')}
                                                         </button>
                                                         <button
+                                                            className={styles.btnCancel}
+                                                            style={{ flex: '1 1 120px', opacity: isTogglingProduct ? 0.5 : 1, cursor: isTogglingProduct ? 'not-allowed' : 'pointer' }}
+                                                            disabled={isTogglingProduct}
+                                                            onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                await toggleProduct({ variables: { id: prod.id, is_active: prod.is_active === false } });
+                                                            }}
+                                                        >
+                                                            {isTogglingProduct ? '...' : (prod.is_active === false ? (t('enable') || 'Activer') : (t('disable') || 'Désactiver'))}
+                                                        </button>
+                                                        <button
                                                             className={styles.btnDeleteLux}
-                                                            style={{ flex: 1 }}
+                                                            style={{ flex: '1 1 100%' }}
                                                             onClick={async (e) => {
                                                                 e.stopPropagation();
                                                                 if (confirm(t('confirmDelete') || 'Supprimer ce produit ?')) {
@@ -3187,7 +3209,8 @@ export default function Dashboard() {
                                                 )}
                                             </div>
                                         </motion.div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </motion.div>
                         )}

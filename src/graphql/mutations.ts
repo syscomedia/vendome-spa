@@ -244,6 +244,15 @@ export const REMOVE_PRODUCT_MUTATION = gql`
   }
 `;
 
+export const TOGGLE_PRODUCT_MUTATION = gql`
+  mutation ToggleProduct($id: ID!, $is_active: Boolean!) {
+    toggleProduct(id: $id, is_active: $is_active) {
+      id
+      is_active
+    }
+  }
+`;
+
 export const UPDATE_RESERVATION_STATUS_MUTATION = gql`
   mutation UpdateReservationStatus($id: ID!, $status: String!, $paymentMode: String) {
     updateReservationStatus(id: $id, status: $status, paymentMode: $paymentMode) {
