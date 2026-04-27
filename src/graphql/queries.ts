@@ -33,7 +33,7 @@ export const GET_DASHBOARD_DATA = gql`
       prec_expertise
       award_badge
       calendar_color_id
-      service_id
+      service_ids
     }
     amenities {
       name
@@ -297,7 +297,7 @@ export const GET_SPECIALIST = gql`
       prec_expertise
       award_badge
       calendar_color_id
-      service_id
+      service_ids
       evaluations {
         id
         rating

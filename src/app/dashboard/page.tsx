@@ -403,7 +403,7 @@ export default function Dashboard() {
         award_badge: 'Meilleur Spécialiste',
         historique: '',
         calendar_color_id: '1',
-        serviceId: ''
+        serviceIds: [] as any[]
     });
     const [editingProduct, setEditingProduct] = useState<any>(null);
     const [isFicheModalOpen, setIsFicheModalOpen] = useState(false);
@@ -836,7 +836,7 @@ export default function Dashboard() {
                         <input type="hidden" id="swal-specialist" value="">
                         <div id="dropdown-specialist" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 998; background: white; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border: 1px solid #eee; margin-top: 5px; max-height: 200px; overflow-y: auto; padding: 10px;">
                             <div id="list-specialist">
-                                ${data?.prestataires.map(p => `<div class="dropdown-item specialist-item" data-id="${p.id}" data-name="${p.name}" data-service-id="${p.service_id}" style="padding: 10px 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; color: #444;">${p.name}</div>`).join('')}
+                                ${data?.prestataires.map(p => `<div class="dropdown-item specialist-item" data-id="${p.id}" data-name="${p.name}" data-service-ids="${(p.service_ids || []).join(',')}" style="padding: 10px 15px; border-radius: 8px; cursor: pointer; transition: 0.2s; font-size: 0.9rem; color: #444;">${p.name}</div>`).join('')}
                             </div>
                         </div>
                     </div>
@@ -3767,7 +3767,7 @@ export default function Dashboard() {
                                         {(data?.prestataires || [])
                                             .filter((p: any) => {
                                                 // 1. Filter by service
-                                                if (bookingService?.id && String(p.service_id) !== String(bookingService.id)) return false;
+                                                if (bookingService?.id && !(p.service_ids || []).some((id: any) => String(id) === String(bookingService.id))) return false;
 
                                                 if (!bookingDate) return true; // Show all if date not selected yet
 
@@ -4958,16 +4958,16 @@ export default function Dashboard() {
                                             />
                                         </div>
                                         <div className={styles.inputGroup} style={{ position: 'relative' }}>
-                                            <label>Service Assigné</label>
+                                            <label>Service Assigné ({newSpecialist.serviceIds.length} sélectionnés)</label>
                                             <div
                                                 className={styles.luxuryInput}
                                                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
                                                 onClick={() => { closeAllManualSelects(); setIsAddSpecServiceOpen(!isAddSpecServiceOpen); }}
                                             >
-                                                <span style={{ color: newSpecialist.serviceId ? '#1A0F0A' : '#9a8878' }}>
-                                                    {newSpecialist.serviceId
-                                                        ? (data?.services?.find((s: any) => s.id === newSpecialist.serviceId)?.name || 'Service')
-                                                        : 'Sélectionner un service'}
+                                                <span style={{ color: newSpecialist.serviceIds.length > 0 ? '#1A0F0A' : '#9a8878' }}>
+                                                    {newSpecialist.serviceIds.length > 0
+                                                        ? `${newSpecialist.serviceIds.length} services sélectionnés`
+                                                        : 'Sélectionner des services'}
                                                 </span>
                                                 <motion.div animate={{ rotate: isAddSpecServiceOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
                                                     <ChevronDown size={16} color="#DFB96D" />
@@ -4984,19 +4984,30 @@ export default function Dashboard() {
                                                         style={{ width: '100%', zIndex: 100 }}
                                                     >
                                                         <div className={styles.reservationDropdownList}>
-                                                            {(data?.services || []).map((s: any) => (
-                                                                <div
-                                                                    key={s.id}
-                                                                    className={styles.reservationDropdownItem}
-                                                                    onClick={() => {
-                                                                        setNewSpecialist({ ...newSpecialist, serviceId: s.id });
-                                                                        setIsAddSpecServiceOpen(false);
-                                                                    }}
-                                                                >
-                                                                    <span className={styles.itemName}>{s.name}</span>
-                                                                    <span className={styles.itemPrice}>{s.price} DT</span>
-                                                                </div>
-                                                            ))}
+                                                            {(data?.services || []).map((s: any) => {
+                                                                const isSelected = newSpecialist.serviceIds.includes(s.id);
+                                                                return (
+                                                                    <div
+                                                                        key={s.id}
+                                                                        className={styles.reservationDropdownItem}
+                                                                        style={{ background: isSelected ? 'rgba(223, 185, 109, 0.1)' : 'transparent' }}
+                                                                        onClick={() => {
+                                                                            const updated = isSelected
+                                                                                ? newSpecialist.serviceIds.filter(id => id !== s.id)
+                                                                                : [...newSpecialist.serviceIds, s.id];
+                                                                            setNewSpecialist({ ...newSpecialist, serviceIds: updated });
+                                                                        }}
+                                                                    >
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                            <div style={{ width: '16px', height: '16px', border: '1px solid #DFB96D', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                                {isSelected && <Check size={12} color="#DFB96D" />}
+                                                                            </div>
+                                                                            <span className={styles.itemName}>{s.name}</span>
+                                                                        </div>
+                                                                        <span className={styles.itemPrice}>{s.price} DT</span>
+                                                                    </div>
+                                                                );
+                                                            })}
                                                         </div>
                                                     </motion.div>
                                                 )}
@@ -5167,7 +5178,7 @@ export default function Dashboard() {
                                                     tech_expertise: parseInt(newSpecialist.tech_expertise.toString()),
                                                     hosp_expertise: parseInt(newSpecialist.hosp_expertise.toString()),
                                                     prec_expertise: parseInt(newSpecialist.prec_expertise.toString()),
-                                                    serviceId: newSpecialist.serviceId || null
+                                                    serviceIds: newSpecialist.serviceIds
                                                 }
                                             });
                                             swalLux('success', 'Spécialiste ajouté', 'Le nouveau spécialiste a été créé avec succès.');
@@ -5175,7 +5186,7 @@ export default function Dashboard() {
                                             setNewSpecialist({
                                                 name: '', role: '', specialty: '', image: '', rating: 5.0,
                                                 satisfied_clients: '1.2k', tech_expertise: 95, hosp_expertise: 95, prec_expertise: 95,
-                                                award_badge: 'Meilleur Spécialiste', historique: '', calendar_color_id: '1', serviceId: ''
+                                                award_badge: 'Meilleur Spécialiste', historique: '', calendar_color_id: '1', serviceIds: []
                                             });
                                         } catch (e) {
                                             console.error(e);
@@ -6098,16 +6109,16 @@ export default function Dashboard() {
                                             />
                                         </div>
                                         <div className={styles.inputGroup} style={{ position: 'relative' }}>
-                                            <label>Service Assigné</label>
+                                            <label>Service Assigné ({selectedSpecialistForHistorique.service_ids?.length || 0} sélectionnés)</label>
                                             <div
                                                 className={styles.luxuryInput}
                                                 style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}
                                                 onClick={() => setIsEditSpecServiceOpen(!isEditSpecServiceOpen)}
                                             >
-                                                <span style={{ color: selectedSpecialistForHistorique.service_id ? '#1A0F0A' : '#9a8878' }}>
-                                                    {selectedSpecialistForHistorique.service_id
-                                                        ? (data?.services?.find((s: any) => s.id === selectedSpecialistForHistorique.service_id)?.name || 'Service')
-                                                        : 'Sélectionner un service'}
+                                                <span style={{ color: (selectedSpecialistForHistorique.service_ids?.length || 0) > 0 ? '#1A0F0A' : '#9a8878' }}>
+                                                    {(selectedSpecialistForHistorique.service_ids?.length || 0) > 0
+                                                        ? `${selectedSpecialistForHistorique.service_ids.length} services sélectionnés`
+                                                        : 'Sélectionner des services'}
                                                 </span>
                                                 <motion.div animate={{ rotate: isEditSpecServiceOpen ? 180 : 0 }} transition={{ duration: 0.2 }}>
                                                     <ChevronDown size={16} color="#DFB96D" />
@@ -6124,28 +6135,31 @@ export default function Dashboard() {
                                                         style={{ width: '100%', zIndex: 100 }}
                                                     >
                                                         <div className={styles.reservationDropdownList}>
-                                                            <div
-                                                                className={styles.reservationDropdownItem}
-                                                                onClick={() => {
-                                                                    setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, service_id: null });
-                                                                    setIsEditSpecServiceOpen(false);
-                                                                }}
-                                                            >
-                                                                <span className={styles.itemName}>Aucun service</span>
-                                                            </div>
-                                                            {(data?.services || []).map((s: any) => (
-                                                                <div
-                                                                    key={s.id}
-                                                                    className={styles.reservationDropdownItem}
-                                                                    onClick={() => {
-                                                                        setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, service_id: s.id });
-                                                                        setIsEditSpecServiceOpen(false);
-                                                                    }}
-                                                                >
-                                                                    <span className={styles.itemName}>{s.name}</span>
-                                                                    <span className={styles.itemPrice}>{s.price} DT</span>
-                                                                </div>
-                                                            ))}
+                                                            {(data?.services || []).map((s: any) => {
+                                                                const isSelected = (selectedSpecialistForHistorique.service_ids || []).includes(s.id);
+                                                                return (
+                                                                    <div
+                                                                        key={s.id}
+                                                                        className={styles.reservationDropdownItem}
+                                                                        style={{ background: isSelected ? 'rgba(223, 185, 109, 0.1)' : 'transparent' }}
+                                                                        onClick={() => {
+                                                                            const currentIds = selectedSpecialistForHistorique.service_ids || [];
+                                                                            const updated = isSelected
+                                                                                ? currentIds.filter((id: any) => id !== s.id)
+                                                                                : [...currentIds, s.id];
+                                                                            setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, service_ids: updated });
+                                                                        }}
+                                                                    >
+                                                                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                                            <div style={{ width: '16px', height: '16px', border: '1px solid #DFB96D', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                                                                {isSelected && <Check size={12} color="#DFB96D" />}
+                                                                            </div>
+                                                                            <span className={styles.itemName}>{s.name}</span>
+                                                                        </div>
+                                                                        <span className={styles.itemPrice}>{s.price} DT</span>
+                                                                    </div>
+                                                                );
+                                                            })}
                                                         </div>
                                                     </motion.div>
                                                 )}
@@ -6331,7 +6345,7 @@ export default function Dashboard() {
                                                         prec_expertise: selectedSpecialistForHistorique.prec_expertise,
                                                         award_badge: selectedSpecialistForHistorique.award_badge,
                                                         calendar_color_id: selectedSpecialistForHistorique.calendar_color_id,
-                                                        serviceId: selectedSpecialistForHistorique.service_id || null
+                                                        serviceIds: selectedSpecialistForHistorique.service_ids
                                                     }
                                                 });
                                                 Swal.fire({ title: t('success'), text: 'Profil mis à jour !', icon: 'success', confirmButtonColor: '#DFB96D' });
@@ -6519,7 +6533,7 @@ export default function Dashboard() {
                                                     >
                                                         <div className={styles.reservationDropdownList}>
                                                             {(data?.prestataires || [])
-                                                                .filter((p: any) => !manualReservation.serviceId || p.service_id === manualReservation.serviceId)
+                                                                .filter((p: any) => !manualReservation.serviceId || (p.service_ids || []).some((id: any) => String(id) === String(manualReservation.serviceId)))
                                                                 .map((p: any) => (
                                                                     <div
                                                                         key={p.id}

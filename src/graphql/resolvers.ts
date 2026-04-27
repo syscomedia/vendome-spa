@@ -41,16 +41,16 @@ export const resolvers = {
         },
         prestataires: async (_: any, { serviceId }: any) => {
             try {
-                let queryText = 'SELECT id, name, role, image, rating, specialty, historique, calendar_color_id, service_id FROM specialistes';
+                let queryText = 'SELECT id, name, role, image, rating, specialty, historique, calendar_color_id, service_ids FROM specialistes';
                 const values: any[] = [];
                 if (serviceId) {
-                    queryText += ' WHERE service_id = $1';
-                    values.push(serviceId);
+                    queryText += ' WHERE $1 = ANY(service_ids)';
+                    values.push(parseInt(serviceId));
                 }
                 const res = await query(queryText, values);
                 return res.rows.map(row => ({
                     ...row,
-                    service_id: row.service_id
+                    service_ids: row.service_ids || []
                 }));
             } catch (e) {
                 console.error('Error fetching specialists:', e);
@@ -59,12 +59,12 @@ export const resolvers = {
         },
         prestataire: async (_: any, { id }: any) => {
             try {
-                const res = await query('SELECT id, name, role, image, rating, specialty, historique, calendar_color_id, service_id FROM specialistes WHERE id = $1', [id]);
+                const res = await query('SELECT id, name, role, image, rating, specialty, historique, calendar_color_id, service_ids FROM specialistes WHERE id = $1', [id]);
                 const row = res.rows[0];
                 if (!row) return null;
                 return {
                     ...row,
-                    service_id: row.service_id
+                    service_ids: row.service_ids || []
                 };
             } catch (e) {
                 console.error('Error fetching specialist:', e);
@@ -331,17 +331,20 @@ export const resolvers = {
             `, [parent.id]);
             return res.rows;
         },
-        service: async (parent: any) => {
-            if (!parent.service_id) return null;
-            const res = await query('SELECT * FROM services WHERE id = $1', [parent.service_id]);
-            const row = res.rows[0];
-            if (!row) return null;
-            return { 
-                ...row, 
-                price: parseFloat(row.price) || 0,
-                price_homme: parseFloat(row.price_homme) || 0,
-                price_femme: parseFloat(row.price_femme) || 0
-            };
+        services: async (parent: any) => {
+            if (!parent.service_ids || parent.service_ids.length === 0) return [];
+            try {
+                const res = await query('SELECT * FROM services WHERE id = ANY($1)', [parent.service_ids]);
+                return res.rows.map(row => ({ 
+                    ...row, 
+                    price: parseFloat(row.price) || 0,
+                    price_homme: parseFloat(row.price_homme) || 0,
+                    price_femme: parseFloat(row.price_femme) || 0
+                }));
+            } catch (e) {
+                console.error('Error fetching specialist services:', e);
+                return [];
+            }
         }
     },
     UserLoyalty: {
@@ -529,14 +532,14 @@ export const resolvers = {
             );
             return res.rows[0];
         },
-        addPrestataire: async (_: any, { name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceId }: any) => {
+        addPrestataire: async (_: any, { name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceIds }: any) => {
             const res = await query(
-                'INSERT INTO specialistes (name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, service_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
-                [name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceId]
+                'INSERT INTO specialistes (name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, service_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *',
+                [name, role, image, rating, specialty, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceIds ? serviceIds.map((id: any) => parseInt(id)) : []]
             );
             return {
                 ...res.rows[0],
-                service_id: res.rows[0].service_id
+                service_ids: res.rows[0].service_ids || []
             };
         },
         addPersonnelEvaluation: async (_: any, { userId, personnelId, rating, comment }: any) => {
@@ -836,12 +839,12 @@ export const resolvers = {
             );
             return { ...res.rows[0], price: parseFloat(res.rows[0].price) };
         },
-        updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceId }: any) => {
+        updateSpecialist: async (_: any, { id, name, role, image, specialty, rating, historique, satisfied_clients, tech_expertise, hosp_expertise, prec_expertise, award_badge, calendar_color_id, serviceIds }: any) => {
             try {
                 let queryText = 'UPDATE specialistes SET ';
                 const values: any[] = [];
                 const updates: string[] = [];
-
+ 
                 if (name !== undefined) { updates.push(`name = $${values.length + 1}`); values.push(name); }
                 if (role !== undefined) { updates.push(`role = $${values.length + 1}`); values.push(role); }
                 if (image !== undefined) { updates.push(`image = $${values.length + 1}`); values.push(image); }
@@ -854,18 +857,18 @@ export const resolvers = {
                 if (prec_expertise !== undefined) { updates.push(`prec_expertise = $${values.length + 1}`); values.push(prec_expertise); }
                 if (award_badge !== undefined) { updates.push(`award_badge = $${values.length + 1}`); values.push(award_badge); }
                 if (calendar_color_id !== undefined) { updates.push(`calendar_color_id = $${values.length + 1}`); values.push(calendar_color_id); }
-                if (serviceId !== undefined) { updates.push(`service_id = $${values.length + 1}`); values.push(serviceId); }
-
+                if (serviceIds !== undefined) { updates.push(`service_ids = $${values.length + 1}`); values.push(serviceIds ? serviceIds.map((id: any) => parseInt(id)) : []); }
+ 
                 if (updates.length === 0) {
                     const res = await query('SELECT * FROM specialistes WHERE id = $1', [id]);
-                    return { ...res.rows[0], service_id: res.rows[0].service_id };
+                    return { ...res.rows[0], service_ids: res.rows[0].service_ids || [] };
                 }
-
+ 
                 queryText += updates.join(', ') + ` WHERE id = $${values.length + 1} RETURNING *`;
                 values.push(id);
-
+ 
                 const res = await query(queryText, values);
-                return { ...res.rows[0], service_id: res.rows[0].service_id };
+                return { ...res.rows[0], service_ids: res.rows[0].service_ids || [] };
             } catch (e) {
                 console.error('Update specialist error:', e);
                 throw new Error("Failed to update specialist");

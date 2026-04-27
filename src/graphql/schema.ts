@@ -36,8 +36,8 @@ export const typeDefs = gql`
     prec_expertise: Int
     award_badge: String
     calendar_color_id: String
-    service_id: ID
-    service: Service
+    service_ids: [ID]
+    services: [Service!]
     evaluations: [Evaluation!]
   }
 
@@ -189,7 +189,7 @@ export const typeDefs = gql`
   type Mutation {
     addService(name: String!, description: String!, price: Float!, price_homme: Float, price_femme: Float, image: String, duration: String!, visibility: String, categoryId: ID): Service!
     addServiceCategory(name: String!): ServiceCategory!
-    addPrestataire(name: String!, role: String!, image: String!, rating: Float!, specialty: String!, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String, serviceId: ID): Prestataire!
+    addPrestataire(name: String!, role: String!, image: String!, rating: Float!, specialty: String!, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String, serviceIds: [ID]): Prestataire!
     login(email: String!, password: String!): AuthPayload!
     register(email: String!, password: String!, name: String!): AuthPayload!
     syncGoogleUser(email: String!, name: String!): AuthPayload!
@@ -209,7 +209,7 @@ export const typeDefs = gql`
     updateUserRole(userId: ID!, role: String!): User!
     updateUser(userId: ID!, email: String, name: String, role: String, password: String, tier: String, hair_color_pref: String, favorite_coupe: String, nail_color_pref: String, music_pref: String, music_link: String, drink_pref: String, skin_type: String, birthday: String, phone: String, coffee_pref: String, employee_pref: String, favourite_service: String, allergies: String, last_visit_notes: String, image: String, is_blocked: Boolean): User!
     removeUser(userId: ID!): Boolean
-    updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String, serviceId: ID): Prestataire!
+    updateSpecialist(id: ID!, name: String, role: String, image: String, specialty: String, rating: Float, historique: String, satisfied_clients: String, tech_expertise: Int, hosp_expertise: Int, prec_expertise: Int, award_badge: String, calendar_color_id: String, serviceIds: [ID]): Prestataire!
     addProduct(name: String!, description: String, price: Float!, image: String): Product!
     updateProduct(id: ID!, name: String, description: String, price: Float, image: String): Product!
     removeProduct(id: ID!): Boolean
