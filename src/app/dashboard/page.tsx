@@ -64,6 +64,8 @@ import {
     Download
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import Cropper from 'react-easy-crop';
+
 
 const GOOGLE_CALENDAR_COLORS = [
     { id: '1', hex: '#7986cb', name: 'Lavender' },
@@ -262,6 +264,49 @@ const ServiceItem = ({ service, t, styles, toggleService, removeService, setEdit
     </div>
 );
 
+const createImage = (url: string): Promise<HTMLImageElement> =>
+    new Promise((resolve, reject) => {
+        const image = new Image();
+        image.addEventListener('load', () => resolve(image));
+        image.addEventListener('error', (error) => reject(error));
+        image.setAttribute('crossOrigin', 'anonymous');
+        image.src = url;
+    });
+
+async function getCroppedImg(imageSrc: string, pixelCrop: any): Promise<string> {
+    const image = await createImage(imageSrc);
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    if (!ctx) return '';
+
+    canvas.width = pixelCrop.width;
+    canvas.height = pixelCrop.height;
+
+    ctx.drawImage(
+        image,
+        pixelCrop.x,
+        pixelCrop.y,
+        pixelCrop.width,
+        pixelCrop.height,
+        0,
+        0,
+        pixelCrop.width,
+        pixelCrop.height
+    );
+
+    return new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+            if (!blob) return;
+            const reader = new FileReader();
+            reader.readAsDataURL(blob);
+            reader.onloadend = () => {
+                resolve(reader.result as string);
+            };
+        }, 'image/jpeg');
+    });
+}
+
 export default function Dashboard() {
     const [mounted, setMounted] = useState(false);
     const [user, setUser] = useState<any>(null);
@@ -339,7 +384,7 @@ export default function Dashboard() {
     const [isBookingModalOpen, setIsBookingModalOpen] = useState(false);
     const [bookingService, setBookingService] = useState<any>(null);
     const [bookingDuration, setBookingDuration] = useState(90);
-    const [selectedGender, setSelectedGender] = useState('femme');
+    const [selectedGender, setSelectedGender] = useState<string | null>(null);
 
     const parseDuration = (dur: string) => {
         if (!dur) return 90;
@@ -384,6 +429,7 @@ export default function Dashboard() {
         start: formatLocalDate(new Date()),
         end: formatLocalDate(new Date())
     });
+    const [agendaSelectedDate, setAgendaSelectedDate] = useState(formatLocalDate(new Date()));
     const [selectedClientForDetails, setSelectedClientForDetails] = useState<any>(null);
     const [isUploading, setIsUploading] = useState(false);
     const [isAddProductModalOpen, setIsAddProductModalOpen] = useState(false);
@@ -405,6 +451,46 @@ export default function Dashboard() {
         calendar_color_id: '1',
         serviceIds: [] as any[]
     });
+    const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+    const [crop, setCrop] = useState({ x: 0, y: 0 });
+    const [zoom, setZoom] = useState(1);
+    const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+    const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+    const [cropType, setCropType] = useState<'add' | 'edit'>('add');
+    const [isAgendaDatePickerOpen, setIsAgendaDatePickerOpen] = useState(false);
+    const agendaDatePickerRef = useRef<HTMLDivElement>(null);
+    const agendaDatePickerModalRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const isOutsideMain = agendaDatePickerRef.current && !agendaDatePickerRef.current.contains(event.target as Node);
+            const isOutsideModal = agendaDatePickerModalRef.current && !agendaDatePickerModalRef.current.contains(event.target as Node);
+            
+            if (isOutsideMain && isOutsideModal) {
+                setIsAgendaDatePickerOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    const [calendarViewDate, setCalendarViewDate] = useState(new Date());
+
+    const getDaysInMonth = (date: Date) => {
+        const year = date.getFullYear();
+        const month = date.getMonth();
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        const days = [];
+        for (let i = 0; i < firstDay; i++) {
+            days.push(null);
+        }
+        for (let i = 1; i <= daysInMonth; i++) {
+            days.push(new Date(year, month, i));
+        }
+        return days;
+    };
     const [editingProduct, setEditingProduct] = useState<any>(null);
     const [isFicheModalOpen, setIsFicheModalOpen] = useState(false);
     const [selectedClientForFiche, setSelectedClientForFiche] = useState<any>(null);
@@ -524,7 +610,7 @@ export default function Dashboard() {
         XLSX.writeFile(wb, 'Vendome_Clients.xlsx');
     };
 
-    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct' | 'ficheClient' | 'newClient' | 'editClient' | 'editSpecialist') => {
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'new' | 'edit' | 'newProduct' | 'editProduct' | 'ficheClient' | 'newClient' | 'editClient' | 'editSpecialist' | 'newSpecialist') => {
         const file = e.target.files?.[0];
         if (!file) return;
 
@@ -540,6 +626,14 @@ export default function Dashboard() {
         reader.onloadend = () => {
             const base64String = reader.result as string;
 
+            if (type === 'editSpecialist' || type === 'newSpecialist') {
+                setImageToCrop(base64String);
+                setCropType(type === 'editSpecialist' ? 'edit' : 'add');
+                setIsCropModalOpen(true);
+                setIsUploading(false);
+                return;
+            }
+
             if (type === 'new') {
                 setNewService({ ...newService, image: base64String });
             } else if (type === 'edit') {
@@ -554,8 +648,6 @@ export default function Dashboard() {
                 setNewClient({ ...newClient, image: base64String });
             } else if (type === 'editClient') {
                 setEditingClient({ ...editingClient, image: base64String });
-            } else if (type === 'editSpecialist') {
-                setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, image: base64String });
             }
             setIsUploading(false);
         };
@@ -648,7 +740,7 @@ export default function Dashboard() {
     };
 
     const getTodaysAgenda = () => {
-        const today = formatLocalDate(new Date());
+        const today = agendaSelectedDate;
 
         const internal = (data?.allReservations || []).filter((res: any) => {
             const dateObj = new Date(res.date);
@@ -1376,17 +1468,101 @@ export default function Dashboard() {
                                             <div className={styles.intelCard} onClick={() => setIsAgendaModalOpen(true)} style={{ cursor: 'pointer' }}>
                                                 <div className={styles.intelHeader} style={{ marginBottom: '25px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                                                        <Calendar size={20} color="#DFB96D" />
-                                                        <h3 style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: '1.4rem' }}>Agenda du Jour</h3>
-                                                        <div style={{
-                                                            background: 'rgba(255, 71, 87, 0.1)',
-                                                            color: '#ff4757',
-                                                            fontSize: '0.65rem',
-                                                            padding: '4px 10px',
-                                                            borderRadius: '20px',
-                                                            fontWeight: 'bold',
-                                                            letterSpacing: '1px'
-                                                        }}>LIVE</div>
+                                                        <div style={{ position: 'relative' }} ref={agendaDatePickerRef}>
+                                                            <div 
+                                                                onClick={(e) => { e.stopPropagation(); setIsAgendaDatePickerOpen(!isAgendaDatePickerOpen); }}
+                                                                style={{ 
+                                                                    cursor: 'pointer',
+                                                                    background: 'rgba(223, 185, 109, 0.1)',
+                                                                    padding: '8px',
+                                                                    borderRadius: '12px',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    transition: 'all 0.3s ease',
+                                                                    border: isAgendaDatePickerOpen ? '1px solid #DFB96D' : '1px solid transparent'
+                                                                }}
+                                                            >
+                                                                <Calendar size={22} color="#DFB96D" />
+                                                            </div>
+
+                                                            <AnimatePresence>
+                                                                {isAgendaDatePickerOpen && (
+                                                                    <motion.div 
+                                                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                        style={{ 
+                                                                            position: 'absolute', 
+                                                                            top: '50px', 
+                                                                            left: 0, 
+                                                                            zIndex: 1000,
+                                                                            background: 'white',
+                                                                            borderRadius: '24px',
+                                                                            boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
+                                                                            border: '1px solid rgba(223, 185, 109, 0.2)',
+                                                                            padding: '20px',
+                                                                            minWidth: '300px'
+                                                                        }}
+                                                                    >
+                                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                                                                            <button onClick={(e) => { e.stopPropagation(); setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1)); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DFB96D' }}><ChevronLeft size={20} /></button>
+                                                                            <span style={{ fontWeight: '800', color: '#1A0F0A', textTransform: 'capitalize' }}>
+                                                                                {calendarViewDate.toLocaleDateString(language, { month: 'long', year: 'numeric' })}
+                                                                            </span>
+                                                                            <button onClick={(e) => { e.stopPropagation(); setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1)); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DFB96D' }}><ChevronRight size={20} /></button>
+                                                                        </div>
+                                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px', textAlign: 'center', marginBottom: '10px' }}>
+                                                                            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, idx) => <span key={`${d}-${idx}`} style={{ fontSize: '0.7rem', fontWeight: '900', color: '#9a8878' }}>{d}</span>)}
+                                                                            {getDaysInMonth(calendarViewDate).map((date, i) => (
+                                                                                <div 
+                                                                                    key={i}
+                                                                                    onClick={(e) => {
+                                                                                        if (date) {
+                                                                                            e.stopPropagation();
+                                                                                            setAgendaSelectedDate(formatLocalDate(date));
+                                                                                            setIsAgendaDatePickerOpen(false);
+                                                                                        }
+                                                                                    }}
+                                                                                    style={{ 
+                                                                                        padding: '8px 0',
+                                                                                        borderRadius: '10px',
+                                                                                        fontSize: '0.9rem',
+                                                                                        cursor: date ? 'pointer' : 'default',
+                                                                                        background: date && formatLocalDate(date) === agendaSelectedDate ? '#DFB96D' : 'transparent',
+                                                                                        color: date && formatLocalDate(date) === agendaSelectedDate ? 'white' : (date ? '#1A0F0A' : 'transparent'),
+                                                                                        fontWeight: date && formatLocalDate(date) === agendaSelectedDate ? 'bold' : '500',
+                                                                                        transition: 'all 0.2s'
+                                                                                    }}
+                                                                                >
+                                                                                    {date ? date.getDate() : ''}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                        <button 
+                                                                            onClick={(e) => { e.stopPropagation(); setAgendaSelectedDate(formatLocalDate(new Date())); setIsAgendaDatePickerOpen(false); setCalendarViewDate(new Date()); }}
+                                                                            style={{ width: '100%', padding: '10px', borderRadius: '12px', border: '1px solid #DFB96D', background: 'rgba(223, 185, 109, 0.05)', color: '#DFB96D', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer' }}
+                                                                        >
+                                                                            Aujourd'hui
+                                                                        </button>
+                                                                    </motion.div>
+                                                                )}
+                                                            </AnimatePresence>
+                                                        </div>
+                                                        <h3 style={{ margin: 0, fontFamily: "'Playfair Display', serif", fontSize: '1.4rem' }}>
+                                                            {agendaSelectedDate === formatLocalDate(new Date()) ? "Agenda du Jour" : `Agenda du ${new Date(agendaSelectedDate).toLocaleDateString(language, { day: 'numeric', month: 'short' })}`}
+                                                        </h3>
+                                                        {agendaSelectedDate === formatLocalDate(new Date()) && (
+                                                            <div style={{
+                                                                background: 'rgba(255, 71, 87, 0.1)',
+                                                                color: '#ff4757',
+                                                                fontSize: '0.65rem',
+                                                                padding: '4px 10px',
+                                                                borderRadius: '20px',
+                                                                fontWeight: 'bold',
+                                                                letterSpacing: '1px'
+                                                            }}>LIVE</div>
+                                                        )}
                                                     </div>
                                                     <div style={{ display: 'flex', gap: '10px' }}>
                                                         <button
@@ -1740,146 +1916,148 @@ export default function Dashboard() {
                                         </div>
 
                                         {/* Search and Filter UI for Clients */}
-                                        <div style={{ maxWidth: '900px', margin: '0 auto 40px', display: 'flex', gap: '20px', flexWrap: 'wrap', padding: '0 20px' }}>
-                                            <div style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
-                                                <div style={{ 
-                                                    position: 'absolute', 
-                                                    insetInlineStart: '25px', 
-                                                    top: '50%', 
-                                                    transform: 'translateY(-50%)', 
-                                                    color: '#DFB96D', 
-                                                    display: 'flex', 
-                                                    alignItems: 'center',
-                                                    pointerEvents: 'none'
-                                                }}>
-                                                    <Search size={22} />
-                                                </div>
-                                                    <input 
-                                                        type="text" 
-                                                        placeholder={t('searchService')} 
+                                        {selectedGender && (
+                                            <div style={{ maxWidth: '900px', margin: '0 auto 40px', display: 'flex', gap: '20px', flexWrap: 'wrap', padding: '0 20px' }}>
+                                                <div style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
+                                                    <div style={{
+                                                        position: 'absolute',
+                                                        insetInlineStart: '25px',
+                                                        top: '50%',
+                                                        transform: 'translateY(-50%)',
+                                                        color: '#DFB96D',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        pointerEvents: 'none'
+                                                    }}>
+                                                        <Search size={22} />
+                                                    </div>
+                                                    <input
+                                                        type="text"
+                                                        placeholder={t('searchService')}
                                                         value={serviceSearchTerm}
                                                         onChange={(e) => setServiceSearchTerm(e.target.value)}
-                                                        style={{ 
-                                                            width: '100%', 
+                                                        style={{
+                                                            width: '100%',
                                                             paddingInlineStart: '65px',
                                                             paddingInlineEnd: '25px',
                                                             paddingTop: 0,
                                                             paddingBottom: 0,
-                                                            borderRadius: '50px', 
-                                                            border: '1px solid rgba(223, 185, 109, 0.2)', 
-                                                            background: 'white', 
-                                                            color: '#1A0F0A', 
+                                                            borderRadius: '50px',
+                                                            border: '1px solid rgba(223, 185, 109, 0.2)',
+                                                            background: 'white',
+                                                            color: '#1A0F0A',
                                                             outline: 'none',
                                                             fontSize: '1rem',
                                                             height: '60px',
                                                             textAlign: 'start',
                                                             boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
                                                             transition: 'all 0.3s ease'
-                                                        }} 
+                                                        }}
                                                     />
-                                            </div>
-                                            <div ref={categoryDropdownRef} style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
-                                                <button 
-                                                    onClick={() => setIsServiceCategoryDropdownOpen(!isServiceCategoryDropdownOpen)}
-                                                    style={{ 
-                                                        width: '100%',
-                                                        padding: '0 50px 0 30px', 
-                                                        borderRadius: '50px', 
-                                                        border: '1px solid rgba(223, 185, 109, 0.3)', 
-                                                        background: 'white', 
-                                                        color: '#DFB96D', 
-                                                        outline: 'none',
-                                                        cursor: 'pointer',
-                                                        height: '60px',
-                                                        fontSize: '0.95rem',
-                                                        fontWeight: '800',
-                                                        boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
-                                                        display: 'flex',
-                                                        alignItems: 'center',
-                                                        justifyContent: 'space-between',
-                                                        transition: 'all 0.3s ease'
-                                                    }}
-                                                >
-                                                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                                        {serviceCategoryFilter ? (data?.serviceCategories?.find((c: any) => String(c.id) === String(serviceCategoryFilter))?.name || t('allCategories')) : t('allCategories')}
-                                                    </span>
-                                                    <ChevronDown size={20} style={{ transform: isServiceCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }} />
-                                                </button>
+                                                </div>
+                                                <div ref={categoryDropdownRef} style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
+                                                    <button
+                                                        onClick={() => setIsServiceCategoryDropdownOpen(!isServiceCategoryDropdownOpen)}
+                                                        style={{
+                                                            width: '100%',
+                                                            padding: '0 50px 0 30px',
+                                                            borderRadius: '50px',
+                                                            border: '1px solid rgba(223, 185, 109, 0.3)',
+                                                            background: 'white',
+                                                            color: '#DFB96D',
+                                                            outline: 'none',
+                                                            cursor: 'pointer',
+                                                            height: '60px',
+                                                            fontSize: '0.95rem',
+                                                            fontWeight: '800',
+                                                            boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'space-between',
+                                                            transition: 'all 0.3s ease'
+                                                        }}
+                                                    >
+                                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                            {serviceCategoryFilter ? (data?.serviceCategories?.find((c: any) => String(c.id) === String(serviceCategoryFilter))?.name || t('allCategories')) : t('allCategories')}
+                                                        </span>
+                                                        <ChevronDown size={20} style={{ transform: isServiceCategoryDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }} />
+                                                    </button>
 
-                                                <AnimatePresence>
-                                                    {isServiceCategoryDropdownOpen && (
-                                                        <motion.div 
-                                                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                                                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                            style={{ 
-                                                                position: 'absolute', 
-                                                                top: '75px', 
-                                                                right: 0, 
-                                                                width: '100%',
-                                                                minWidth: '240px',
-                                                                background: 'white', 
-                                                                borderRadius: '25px', 
-                                                                boxShadow: '0 15px 45px rgba(0,0,0,0.15)', 
-                                                                border: '1px solid rgba(223, 185, 109, 0.1)',
-                                                                padding: '12px',
-                                                                zIndex: 1000,
-                                                                maxHeight: '400px',
-                                                                overflowY: 'auto'
-                                                            }}
-                                                        >
-                                                            <button 
-                                                                onClick={() => {
-                                                                    setServiceCategoryFilter('');
-                                                                    setIsServiceCategoryDropdownOpen(false);
-                                                                }}
-                                                                style={{ 
-                                                                    width: '100%', 
-                                                                    padding: '12px 20px', 
-                                                                    borderRadius: '15px', 
-                                                                    border: 'none', 
-                                                                    background: !serviceCategoryFilter ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
-                                                                    color: !serviceCategoryFilter ? '#DFB96D' : '#1A0F0A',
-                                                                    textAlign: 'left',
-                                                                    fontSize: '0.9rem',
-                                                                    fontWeight: !serviceCategoryFilter ? '800' : '500',
-                                                                    cursor: 'pointer',
-                                                                    transition: 'all 0.2s',
-                                                                    marginBottom: '4px'
+                                                    <AnimatePresence>
+                                                        {isServiceCategoryDropdownOpen && (
+                                                            <motion.div
+                                                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                                style={{
+                                                                    position: 'absolute',
+                                                                    top: '75px',
+                                                                    right: 0,
+                                                                    width: '100%',
+                                                                    minWidth: '240px',
+                                                                    background: 'white',
+                                                                    borderRadius: '25px',
+                                                                    boxShadow: '0 15px 45px rgba(0,0,0,0.15)',
+                                                                    border: '1px solid rgba(223, 185, 109, 0.1)',
+                                                                    padding: '12px',
+                                                                    zIndex: 1000,
+                                                                    maxHeight: '400px',
+                                                                    overflowY: 'auto'
                                                                 }}
                                                             >
-                                                                {t('allCategories')}
-                                                            </button>
-                                                            {serviceCategories.map((cat: any) => (
-                                                                <button 
-                                                                    key={cat.id}
+                                                                <button
                                                                     onClick={() => {
-                                                                        setServiceCategoryFilter(cat.id);
+                                                                        setServiceCategoryFilter('');
                                                                         setIsServiceCategoryDropdownOpen(false);
                                                                     }}
-                                                                    style={{ 
-                                                                        width: '100%', 
-                                                                        padding: '12px 20px', 
-                                                                        borderRadius: '15px', 
-                                                                        border: 'none', 
-                                                                        background: String(serviceCategoryFilter) === String(cat.id) ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
-                                                                        color: String(serviceCategoryFilter) === String(cat.id) ? '#DFB96D' : '#1A0F0A',
+                                                                    style={{
+                                                                        width: '100%',
+                                                                        padding: '12px 20px',
+                                                                        borderRadius: '15px',
+                                                                        border: 'none',
+                                                                        background: !serviceCategoryFilter ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
+                                                                        color: !serviceCategoryFilter ? '#DFB96D' : '#1A0F0A',
                                                                         textAlign: 'left',
                                                                         fontSize: '0.9rem',
-                                                                        fontWeight: String(serviceCategoryFilter) === String(cat.id) ? '800' : '500',
+                                                                        fontWeight: !serviceCategoryFilter ? '800' : '500',
                                                                         cursor: 'pointer',
                                                                         transition: 'all 0.2s',
                                                                         marginBottom: '4px'
                                                                     }}
                                                                 >
-                                                                    {cat.name}
+                                                                    {t('allCategories')}
                                                                 </button>
-                                                            ))}
-                                                        </motion.div>
-                                                    )}
-                                                </AnimatePresence>
+                                                                {serviceCategories.map((cat: any) => (
+                                                                    <button
+                                                                        key={cat.id}
+                                                                        onClick={() => {
+                                                                            setServiceCategoryFilter(cat.id);
+                                                                            setIsServiceCategoryDropdownOpen(false);
+                                                                        }}
+                                                                        style={{
+                                                                            width: '100%',
+                                                                            padding: '12px 20px',
+                                                                            borderRadius: '15px',
+                                                                            border: 'none',
+                                                                            background: String(serviceCategoryFilter) === String(cat.id) ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
+                                                                            color: String(serviceCategoryFilter) === String(cat.id) ? '#DFB96D' : '#1A0F0A',
+                                                                            textAlign: 'left',
+                                                                            fontSize: '0.9rem',
+                                                                            fontWeight: String(serviceCategoryFilter) === String(cat.id) ? '800' : '500',
+                                                                            cursor: 'pointer',
+                                                                            transition: 'all 0.2s',
+                                                                            marginBottom: '4px'
+                                                                        }}
+                                                                    >
+                                                                        {cat.name}
+                                                                    </button>
+                                                                ))}
+                                                            </motion.div>
+                                                        )}
+                                                    </AnimatePresence>
+                                                </div>
                                             </div>
-                                        </div>
+                                        )}
 
                                         <div style={{ display: 'flex', justifyContent: 'center', gap: '20px', marginBottom: '40px' }}>
                                             <button
@@ -1919,8 +2097,45 @@ export default function Dashboard() {
                                         </div>
 
                                         {(() => {
-                                            const baseFiltered = services.filter((s: any) => 
-                                                s.enabled !== false && 
+                                            if (!selectedGender) {
+                                                return (
+                                                    <div style={{
+                                                        textAlign: 'center',
+                                                        padding: '80px 40px',
+                                                        background: 'rgba(223, 185, 109, 0.03)',
+                                                        borderRadius: '40px',
+                                                        border: '1px dashed rgba(223, 185, 109, 0.2)',
+                                                        marginBottom: '60px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        alignItems: 'center',
+                                                        gap: '20px'
+                                                    }}>
+                                                        <div style={{
+                                                            width: '80px',
+                                                            height: '80px',
+                                                            borderRadius: '50%',
+                                                            background: 'rgba(223, 185, 109, 0.1)',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            marginBottom: '10px'
+                                                        }}>
+                                                            <Sparkles size={40} color="#DFB96D" />
+                                                        </div>
+                                                        <h3 style={{ color: '#DFB96D', fontSize: '1.5rem', fontFamily: "'Playfair Display', serif" }}>
+                                                            {language === 'ar' ? 'مرحباً بكم في عالم فاندوم' : 'Bienvenue dans l\'Univers Vendôme'}
+                                                        </h3>
+                                                        <p style={{ color: '#9a8878', fontSize: '1.1rem', maxWidth: '500px', lineHeight: '1.6' }}>
+                                                            {language === 'ar'
+                                                                ? 'يرجى اختيار جنسك (رجل أو امرأة) لاستكشاف طقوس العناية المخصصة لك.'
+                                                                : 'Veuillez sélectionner votre univers (HOMME ou FEMME) pour découvrir nos rituels de soin d\'exception personnalisés.'}
+                                                        </p>
+                                                    </div>
+                                                );
+                                            }
+                                            const baseFiltered = services.filter((s: any) =>
+                                                s.enabled !== false &&
                                                 ((s.visibility || 'both').toLowerCase() === 'both' || (s.visibility || '').toLowerCase() === (selectedGender || '').toLowerCase()) &&
                                                 s.name.toLowerCase().includes(serviceSearchTerm.toLowerCase()) &&
                                                 (!serviceCategoryFilter || String(s.categoryId) === String(serviceCategoryFilter))
@@ -1931,7 +2146,7 @@ export default function Dashboard() {
                                                 services: baseFiltered.filter((s: any) => String(s.categoryId) === String(cat.id))
                                             })).filter(cat => cat.services.length > 0);
 
-                                            const uncategorized = baseFiltered.filter((s: any) => 
+                                            const uncategorized = baseFiltered.filter((s: any) =>
                                                 !s.categoryId || !serviceCategories.find((cat: any) => String(cat.id) === String(s.categoryId))
                                             );
 
@@ -2214,53 +2429,53 @@ export default function Dashboard() {
                                     {/* Search and Filter UI */}
                                     <div style={{ maxWidth: '900px', margin: '0 auto 40px', display: 'flex', gap: '20px', flexWrap: 'wrap', padding: '0 20px' }}>
                                         <div style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
-                                            <div style={{ 
-                                                position: 'absolute', 
-                                                insetInlineStart: '25px', 
-                                                top: '50%', 
-                                                transform: 'translateY(-50%)', 
-                                                color: '#DFB96D', 
-                                                display: 'flex', 
+                                            <div style={{
+                                                position: 'absolute',
+                                                insetInlineStart: '25px',
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                color: '#DFB96D',
+                                                display: 'flex',
                                                 alignItems: 'center',
                                                 pointerEvents: 'none',
                                                 zIndex: 1
                                             }}>
                                                 <Search size={22} />
                                             </div>
-                                            <input 
-                                                type="text" 
-                                                placeholder={t('searchService')} 
+                                            <input
+                                                type="text"
+                                                placeholder={t('searchService')}
                                                 value={serviceSearchTerm}
                                                 onChange={(e) => setServiceSearchTerm(e.target.value)}
-                                                style={{ 
-                                                    width: '100%', 
+                                                style={{
+                                                    width: '100%',
                                                     paddingInlineStart: '65px',
                                                     paddingInlineEnd: '25px',
                                                     paddingTop: 0,
                                                     paddingBottom: 0,
-                                                    borderRadius: '50px', 
-                                                    border: '1px solid rgba(223, 185, 109, 0.2)', 
-                                                    background: 'white', 
-                                                    color: '#1A0F0A', 
+                                                    borderRadius: '50px',
+                                                    border: '1px solid rgba(223, 185, 109, 0.2)',
+                                                    background: 'white',
+                                                    color: '#1A0F0A',
                                                     outline: 'none',
                                                     fontSize: '1rem',
                                                     height: '60px',
                                                     textAlign: 'start',
                                                     boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
                                                     transition: 'all 0.3s ease'
-                                                }} 
+                                                }}
                                             />
                                         </div>
                                         <div ref={categoryDropdownRef} style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
-                                            <button 
+                                            <button
                                                 onClick={() => setIsServiceCategoryDropdownOpen(!isServiceCategoryDropdownOpen)}
-                                                style={{ 
+                                                style={{
                                                     width: '100%',
-                                                    padding: '0 50px 0 30px', 
-                                                    borderRadius: '50px', 
-                                                    border: '1px solid rgba(223, 185, 109, 0.3)', 
-                                                    background: 'white', 
-                                                    color: '#DFB96D', 
+                                                    padding: '0 50px 0 30px',
+                                                    borderRadius: '50px',
+                                                    border: '1px solid rgba(223, 185, 109, 0.3)',
+                                                    background: 'white',
+                                                    color: '#DFB96D',
                                                     outline: 'none',
                                                     cursor: 'pointer',
                                                     height: '60px',
@@ -2281,19 +2496,19 @@ export default function Dashboard() {
 
                                             <AnimatePresence>
                                                 {isServiceCategoryDropdownOpen && (
-                                                    <motion.div 
+                                                    <motion.div
                                                         initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                                         animate={{ opacity: 1, y: 0, scale: 1 }}
                                                         exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                        style={{ 
-                                                            position: 'absolute', 
-                                                            top: '75px', 
-                                                            right: 0, 
+                                                        style={{
+                                                            position: 'absolute',
+                                                            top: '75px',
+                                                            right: 0,
                                                             width: '100%',
                                                             minWidth: '240px',
-                                                            background: 'white', 
-                                                            borderRadius: '25px', 
-                                                            boxShadow: '0 15px 45px rgba(0,0,0,0.15)', 
+                                                            background: 'white',
+                                                            borderRadius: '25px',
+                                                            boxShadow: '0 15px 45px rgba(0,0,0,0.15)',
                                                             border: '1px solid rgba(223, 185, 109, 0.1)',
                                                             padding: '12px',
                                                             zIndex: 1000,
@@ -2301,17 +2516,17 @@ export default function Dashboard() {
                                                             overflowY: 'auto'
                                                         }}
                                                     >
-                                                        <button 
+                                                        <button
                                                             onClick={() => {
                                                                 setServiceCategoryFilter('');
                                                                 setIsServiceCategoryDropdownOpen(false);
                                                             }}
-                                                            style={{ 
-                                                                width: '100%', 
-                                                                padding: '12px 20px', 
-                                                                borderRadius: '15px', 
-                                                                border: 'none', 
-                                                                background: !serviceCategoryFilter ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
+                                                            style={{
+                                                                width: '100%',
+                                                                padding: '12px 20px',
+                                                                borderRadius: '15px',
+                                                                border: 'none',
+                                                                background: !serviceCategoryFilter ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
                                                                 color: !serviceCategoryFilter ? '#DFB96D' : '#1A0F0A',
                                                                 textAlign: 'left',
                                                                 fontSize: '0.9rem',
@@ -2324,18 +2539,18 @@ export default function Dashboard() {
                                                             Toutes les catégories
                                                         </button>
                                                         {serviceCategories.map((cat: any) => (
-                                                            <button 
+                                                            <button
                                                                 key={cat.id}
                                                                 onClick={() => {
                                                                     setServiceCategoryFilter(cat.id);
                                                                     setIsServiceCategoryDropdownOpen(false);
                                                                 }}
-                                                                style={{ 
-                                                                    width: '100%', 
-                                                                    padding: '12px 20px', 
-                                                                    borderRadius: '15px', 
-                                                                    border: 'none', 
-                                                                    background: String(serviceCategoryFilter) === String(cat.id) ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
+                                                                style={{
+                                                                    width: '100%',
+                                                                    padding: '12px 20px',
+                                                                    borderRadius: '15px',
+                                                                    border: 'none',
+                                                                    background: String(serviceCategoryFilter) === String(cat.id) ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
                                                                     color: String(serviceCategoryFilter) === String(cat.id) ? '#DFB96D' : '#1A0F0A',
                                                                     textAlign: 'left',
                                                                     fontSize: '0.9rem',
@@ -2356,7 +2571,7 @@ export default function Dashboard() {
 
                                     {/* Grouped Services List */}
                                     {(() => {
-                                        const filteredServices = services.filter((s: any) => 
+                                        const filteredServices = services.filter((s: any) =>
                                             s.name.toLowerCase().includes(serviceSearchTerm.toLowerCase()) &&
                                             (!serviceCategoryFilter || String(s.categoryId) === String(serviceCategoryFilter))
                                         );
@@ -2366,7 +2581,7 @@ export default function Dashboard() {
                                             services: filteredServices.filter((s: any) => String(s.categoryId) === String(cat.id))
                                         })).filter(cat => cat.services.length > 0);
 
-                                        const uncategorized = filteredServices.filter((s: any) => 
+                                        const uncategorized = filteredServices.filter((s: any) =>
                                             !s.categoryId || !serviceCategories.find((cat: any) => String(cat.id) === String(s.categoryId))
                                         );
 
@@ -2549,7 +2764,7 @@ export default function Dashboard() {
                                 className={styles.tabContent}
                             >
                                 <div className={styles.sectionHeader}>
-                                    <h2>Prestations Exécutées</h2>
+                                    <h2>{user?.role === 'admin' ? (language === 'ar' ? 'التخطيط' : 'Planning') : 'Prestations Exécutées'}</h2>
                                     <div className={styles.headerLine} />
                                 </div>
                                 <div className={styles.historyTimeline}>
@@ -2629,12 +2844,12 @@ export default function Dashboard() {
                                         } catch { return false; }
                                     }).sort((a: any, b: any) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
 
-                                     const slotRes = (data?.allReservations || []).filter((r: any) => {
-                                         try {
-                                             const d = parseDate(r.date).getTime();
-                                             return d >= slotStart.getTime() && d < slotEnd.getTime();
-                                         } catch { return false; }
-                                     }).sort((a: any, b: any) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
+                                    const slotRes = (data?.allReservations || []).filter((r: any) => {
+                                        try {
+                                            const d = parseDate(r.date).getTime();
+                                            return d >= slotStart.getTime() && d < slotEnd.getTime();
+                                        } catch { return false; }
+                                    }).sort((a: any, b: any) => parseDate(a.date).getTime() - parseDate(b.date).getTime());
 
                                     const statusMeta = (status: string) => {
                                         switch (status?.toLowerCase()) {
@@ -2674,47 +2889,47 @@ export default function Dashboard() {
 
                                                 <div style={{ padding: '16px 16px 16px 20px' }}>
                                                     {/* Row 1: time + service name + status */}
-                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', marginBottom: '14px' }}>
-                                                            {/* Row 1: Time & Status */}
-                                                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                                                    <Clock size={14} color="#DFB96D" />
-                                                                    <span style={{ fontSize: '1.1rem', fontWeight: '900', fontFamily: 'monospace', color: '#DFB96D', letterSpacing: '0.5px' }}>
-                                                                        {rDate.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
-                                                                    </span>
-                                                                </div>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: meta.bg, color: meta.color, borderRadius: '20px', padding: '4px 10px', fontSize: '0.68rem', fontWeight: '800', letterSpacing: '0.5px' }}>
-                                                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
-                                                                    {meta.label}
-                                                                </div>
-                                                            </div>
-
-                                                            {/* Row 2: Service Name & Badges */}
-                                                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                                                <span style={{ fontSize: '1.05rem', fontWeight: '800', color: '#1A0F0A', lineHeight: 1.2 }}>
-                                                                    {r.service?.name}
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', marginBottom: '14px' }}>
+                                                        {/* Row 1: Time & Status */}
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                                <Clock size={14} color="#DFB96D" />
+                                                                <span style={{ fontSize: '1.1rem', fontWeight: '900', fontFamily: 'monospace', color: '#DFB96D', letterSpacing: '0.5px' }}>
+                                                                    {rDate.toLocaleTimeString(language, { hour: '2-digit', minute: '2-digit' })}
                                                                 </span>
-                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                                                                    {(r.genre || r.service?.visibility) && (
-                                                                        <span style={{ 
-                                                                            fontSize: '0.62rem', 
-                                                                            padding: '2px 8px', 
-                                                                            borderRadius: '6px', 
-                                                                            background: (r.genre === 'homme' || (!r.genre && r.service?.visibility === 'homme')) ? '#EFF6FF' : (r.genre === 'femme' || (!r.genre && r.service?.visibility === 'femme')) ? '#FFF1F2' : '#F3F4F6',
-                                                                            color: (r.genre === 'homme' || (!r.genre && r.service?.visibility === 'homme')) ? '#2563EB' : (r.genre === 'femme' || (!r.genre && r.service?.visibility === 'femme')) ? '#E11D48' : '#4B5563',
-                                                                            border: `1px solid ${(r.genre === 'homme' || (!r.genre && r.service?.visibility === 'homme')) ? '#DBEAFE' : (r.genre === 'femme' || (!r.genre && r.service?.visibility === 'femme')) ? '#FFE4E6' : '#E5E7EB'}`,
-                                                                            fontWeight: '900',
-                                                                            textTransform: 'uppercase'
-                                                                        }}>
-                                                                            {r.genre || (r.service?.visibility === 'both' ? 'Mixte' : r.service?.visibility)}
-                                                                        </span>
-                                                                    )}
-                                                                    {isEarly && (
-                                                                        <span style={{ fontSize: '0.6rem', padding: '2px 8px', borderRadius: '50px', background: 'rgba(59,130,246,0.1)', color: '#3B82F6', border: '1px solid rgba(59,130,246,0.2)', fontWeight: '900', textTransform: 'uppercase' }}>EN AVANCE</span>
-                                                                    )}
-                                                                </div>
+                                                            </div>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', background: meta.bg, color: meta.color, borderRadius: '20px', padding: '4px 10px', fontSize: '0.68rem', fontWeight: '800', letterSpacing: '0.5px' }}>
+                                                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: meta.dot, flexShrink: 0 }} />
+                                                                {meta.label}
                                                             </div>
                                                         </div>
+
+                                                        {/* Row 2: Service Name & Badges */}
+                                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                                                            <span style={{ fontSize: '1.05rem', fontWeight: '800', color: '#1A0F0A', lineHeight: 1.2 }}>
+                                                                {r.service?.name}
+                                                            </span>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                                                {(r.genre || r.service?.visibility) && (
+                                                                    <span style={{
+                                                                        fontSize: '0.62rem',
+                                                                        padding: '2px 8px',
+                                                                        borderRadius: '6px',
+                                                                        background: (r.genre === 'homme' || (!r.genre && r.service?.visibility === 'homme')) ? '#EFF6FF' : (r.genre === 'femme' || (!r.genre && r.service?.visibility === 'femme')) ? '#FFF1F2' : '#F3F4F6',
+                                                                        color: (r.genre === 'homme' || (!r.genre && r.service?.visibility === 'homme')) ? '#2563EB' : (r.genre === 'femme' || (!r.genre && r.service?.visibility === 'femme')) ? '#E11D48' : '#4B5563',
+                                                                        border: `1px solid ${(r.genre === 'homme' || (!r.genre && r.service?.visibility === 'homme')) ? '#DBEAFE' : (r.genre === 'femme' || (!r.genre && r.service?.visibility === 'femme')) ? '#FFE4E6' : '#E5E7EB'}`,
+                                                                        fontWeight: '900',
+                                                                        textTransform: 'uppercase'
+                                                                    }}>
+                                                                        {r.genre || (r.service?.visibility === 'both' ? 'Mixte' : r.service?.visibility)}
+                                                                    </span>
+                                                                )}
+                                                                {isEarly && (
+                                                                    <span style={{ fontSize: '0.6rem', padding: '2px 8px', borderRadius: '50px', background: 'rgba(59,130,246,0.1)', color: '#3B82F6', border: '1px solid rgba(59,130,246,0.2)', fontWeight: '900', textTransform: 'uppercase' }}>EN AVANCE</span>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
 
                                                     {/* Row 2: avatar + client · specialist · duration */}
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -2729,12 +2944,12 @@ export default function Dashboard() {
                                                             <div style={{ fontSize: '0.88rem', fontWeight: '700', color: '#2A211C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                                                 {r.user?.name || 'Client'}
                                                                 {(r.drink_choice || r.user?.drink_pref) && (
-                                                                    <span style={{ 
-                                                                        background: r.drink_choice ? 'linear-gradient(135deg, #DFB96D 0%, #C9973A 100%)' : 'rgba(223, 185, 109, 0.1)', 
-                                                                        color: r.drink_choice ? '#1A0F0A' : '#DFB96D', 
-                                                                        fontSize: '0.65rem', 
-                                                                        padding: '3px 10px', 
-                                                                        borderRadius: '6px', 
+                                                                    <span style={{
+                                                                        background: r.drink_choice ? 'linear-gradient(135deg, #DFB96D 0%, #C9973A 100%)' : 'rgba(223, 185, 109, 0.1)',
+                                                                        color: r.drink_choice ? '#1A0F0A' : '#DFB96D',
+                                                                        fontSize: '0.65rem',
+                                                                        padding: '3px 10px',
+                                                                        borderRadius: '6px',
                                                                         fontWeight: '900',
                                                                         border: r.drink_choice ? 'none' : '1px solid rgba(223, 185, 109, 0.3)',
                                                                         boxShadow: r.drink_choice ? '0 2px 4px rgba(201, 151, 58, 0.2)' : 'none',
@@ -2771,10 +2986,10 @@ export default function Dashboard() {
                                             {earlyArrivedRes.length > 0 && (
                                                 <div style={{ marginBottom: '30px' }}>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '14px' }}>
-                                                        <div style={{ 
-                                                            display: 'flex', alignItems: 'center', justifyContent: 'center', 
-                                                            width: '32px', height: '32px', borderRadius: '10px', 
-                                                            background: 'rgba(59,130,246,0.1)', color: '#3B82F6' 
+                                                        <div style={{
+                                                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                            width: '32px', height: '32px', borderRadius: '10px',
+                                                            background: 'rgba(59,130,246,0.1)', color: '#3B82F6'
                                                         }}>
                                                             <UserCheck size={18} />
                                                         </div>
@@ -2924,11 +3139,11 @@ export default function Dashboard() {
                                                                     <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#3B82F6' }} />
                                                                     VOUS ÊTES SIGNALÉ(E) ARRIVÉ(E)
                                                                     {r.drink_choice && (
-                                                                        <span style={{ 
-                                                                            marginLeft: '15px', 
-                                                                            background: 'rgba(30, 64, 175, 0.1)', 
-                                                                            padding: '4px 12px', 
-                                                                            borderRadius: '10px', 
+                                                                        <span style={{
+                                                                            marginLeft: '15px',
+                                                                            background: 'rgba(30, 64, 175, 0.1)',
+                                                                            padding: '4px 12px',
+                                                                            borderRadius: '10px',
                                                                             fontSize: '0.8rem',
                                                                             display: 'flex',
                                                                             alignItems: 'center',
@@ -3135,80 +3350,80 @@ export default function Dashboard() {
                                     {productsData?.products?.map((prod: any) => {
                                         if (user?.role !== 'admin' && prod.is_active === false) return null;
                                         return (
-                                        <motion.div
-                                            key={prod.id}
-                                            className={styles.serviceCard}
-                                            initial={{ opacity: 0 }}
-                                            animate={{ opacity: 1 }}
-                                            style={{ opacity: prod.is_active === false ? 0.6 : 1 }}
-                                        >
-                                            <div className={styles.serviceImgWrapper}>
-                                                {prod.image ? (
-                                                    <img src={prod.image} alt={prod.name} />
-                                                ) : (
-                                                    <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #FDFCFB 0%, #E2D1C3 100%)' }}>
-                                                        <Gift size={48} color="rgba(223, 185, 109, 0.5)" />
-                                                    </div>
-                                                )}
-                                                <div className={styles.servicePrice}>{prod.price} DT</div>
-                                                {user?.role === 'admin' && (
-                                                    <div style={{ position: 'absolute', top: '25px', insetInlineStart: '25px' }}>
-                                                        <span className={`${styles.serviceStatus} ${prod.is_active !== false ? styles.statusActive : styles.statusDisabled}`}>
-                                                            {prod.is_active !== false ? (t('active') || 'Actif') : (t('disabled') || 'Désactivé')}
-                                                        </span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className={styles.serviceInfo}>
-                                                <h3>{prod.name}</h3>
-                                                <p>{prod.description}</p>
-                                                {user?.role === 'admin' ? (
-                                                    <div className={styles.modalActions} style={{ marginTop: '15px', flexWrap: 'wrap' }}>
-                                                        <button
-                                                            className={styles.btnSaveLux}
-                                                            style={{ flex: '1 1 120px' }}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                setEditingProduct({ ...prod });
-                                                                setIsEditProductModalOpen(true);
-                                                            }}
-                                                        >
-                                                            {t('edit')}
+                                            <motion.div
+                                                key={prod.id}
+                                                className={styles.serviceCard}
+                                                initial={{ opacity: 0 }}
+                                                animate={{ opacity: 1 }}
+                                                style={{ opacity: prod.is_active === false ? 0.6 : 1 }}
+                                            >
+                                                <div className={styles.serviceImgWrapper}>
+                                                    {prod.image ? (
+                                                        <img src={prod.image} alt={prod.name} />
+                                                    ) : (
+                                                        <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #FDFCFB 0%, #E2D1C3 100%)' }}>
+                                                            <Gift size={48} color="rgba(223, 185, 109, 0.5)" />
+                                                        </div>
+                                                    )}
+                                                    <div className={styles.servicePrice}>{prod.price} DT</div>
+                                                    {user?.role === 'admin' && (
+                                                        <div style={{ position: 'absolute', top: '25px', insetInlineStart: '25px' }}>
+                                                            <span className={`${styles.serviceStatus} ${prod.is_active !== false ? styles.statusActive : styles.statusDisabled}`}>
+                                                                {prod.is_active !== false ? (t('active') || 'Actif') : (t('disabled') || 'Désactivé')}
+                                                            </span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className={styles.serviceInfo}>
+                                                    <h3>{prod.name}</h3>
+                                                    <p>{prod.description}</p>
+                                                    {user?.role === 'admin' ? (
+                                                        <div className={styles.modalActions} style={{ marginTop: '15px', flexWrap: 'wrap' }}>
+                                                            <button
+                                                                className={styles.btnSaveLux}
+                                                                style={{ flex: '1 1 120px' }}
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setEditingProduct({ ...prod });
+                                                                    setIsEditProductModalOpen(true);
+                                                                }}
+                                                            >
+                                                                {t('edit')}
+                                                            </button>
+                                                            <button
+                                                                className={styles.btnCancel}
+                                                                style={{ flex: '1 1 120px', opacity: isTogglingProduct ? 0.5 : 1, cursor: isTogglingProduct ? 'not-allowed' : 'pointer' }}
+                                                                disabled={isTogglingProduct}
+                                                                onClick={async (e) => {
+                                                                    e.stopPropagation();
+                                                                    await toggleProduct({ variables: { id: prod.id, is_active: prod.is_active === false } });
+                                                                }}
+                                                            >
+                                                                {isTogglingProduct ? '...' : (prod.is_active === false ? (t('enable') || 'Activer') : (t('disable') || 'Désactiver'))}
+                                                            </button>
+                                                            <button
+                                                                className={styles.btnDeleteLux}
+                                                                style={{ flex: '1 1 100%' }}
+                                                                onClick={async (e) => {
+                                                                    e.stopPropagation();
+                                                                    if (confirm(t('confirmDelete') || 'Supprimer ce produit ?')) {
+                                                                        await removeProduct({ variables: { id: prod.id } });
+                                                                    }
+                                                                }}
+                                                            >
+                                                                {t('remove')}
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <button className="btn-lux" style={{ width: '100%', marginTop: '10px' }} onClick={() => {
+                                                            setCart([...cart, prod]);
+                                                            swalLux('success', t('addedToCart'), prod.name);
+                                                        }}>
+                                                            {t('addToCart')} <Gift size={16} />
                                                         </button>
-                                                        <button
-                                                            className={styles.btnCancel}
-                                                            style={{ flex: '1 1 120px', opacity: isTogglingProduct ? 0.5 : 1, cursor: isTogglingProduct ? 'not-allowed' : 'pointer' }}
-                                                            disabled={isTogglingProduct}
-                                                            onClick={async (e) => {
-                                                                e.stopPropagation();
-                                                                await toggleProduct({ variables: { id: prod.id, is_active: prod.is_active === false } });
-                                                            }}
-                                                        >
-                                                            {isTogglingProduct ? '...' : (prod.is_active === false ? (t('enable') || 'Activer') : (t('disable') || 'Désactiver'))}
-                                                        </button>
-                                                        <button
-                                                            className={styles.btnDeleteLux}
-                                                            style={{ flex: '1 1 100%' }}
-                                                            onClick={async (e) => {
-                                                                e.stopPropagation();
-                                                                if (confirm(t('confirmDelete') || 'Supprimer ce produit ?')) {
-                                                                    await removeProduct({ variables: { id: prod.id } });
-                                                                }
-                                                            }}
-                                                        >
-                                                            {t('remove')}
-                                                        </button>
-                                                    </div>
-                                                ) : (
-                                                    <button className="btn-lux" style={{ width: '100%', marginTop: '10px' }} onClick={() => {
-                                                        setCart([...cart, prod]);
-                                                        swalLux('success', t('addedToCart'), prod.name);
-                                                    }}>
-                                                        {t('addToCart')} <Gift size={16} />
-                                                    </button>
-                                                )}
-                                            </div>
-                                        </motion.div>
+                                                    )}
+                                                </div>
+                                            </motion.div>
                                         );
                                     })}
                                 </div>
@@ -3272,48 +3487,48 @@ export default function Dashboard() {
                                         {/* Search and Filter UI for Clients */}
                                         <div style={{ maxWidth: '900px', width: '100%', margin: '0 auto 40px', display: 'flex', gap: '20px', flexWrap: 'wrap', padding: '0 20px' }}>
                                             <div style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
-                                                <div style={{ 
-                                                    position: 'absolute', 
-                                                    insetInlineStart: '25px', 
-                                                    top: '50%', 
-                                                    transform: 'translateY(-50%)', 
-                                                    color: '#DFB96D', 
-                                                    display: 'flex', 
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    insetInlineStart: '25px',
+                                                    top: '50%',
+                                                    transform: 'translateY(-50%)',
+                                                    color: '#DFB96D',
+                                                    display: 'flex',
                                                     alignItems: 'center',
                                                     pointerEvents: 'none'
                                                 }}>
                                                     <Search size={22} />
                                                 </div>
-                                                    <input 
-                                                        type="text" 
-                                                        placeholder="Rechercher par nom, email ou téléphone..." 
-                                                        value={clientSearch}
-                                                        onChange={(e) => setClientSearch(e.target.value)}
-                                                        style={{ 
-                                                            width: '100%', 
-                                                            padding: '0 25px 0 65px', 
-                                                            borderRadius: '50px', 
-                                                            border: '1px solid rgba(223, 185, 109, 0.2)', 
-                                                            background: 'white', 
-                                                            color: '#1A0F0A', 
-                                                            outline: 'none',
-                                                            fontSize: '1rem',
-                                                            height: '60px',
-                                                            boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
-                                                            transition: 'all 0.3s ease'
-                                                        }} 
-                                                    />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Rechercher par nom, email ou téléphone..."
+                                                    value={clientSearch}
+                                                    onChange={(e) => setClientSearch(e.target.value)}
+                                                    style={{
+                                                        width: '100%',
+                                                        padding: '0 25px 0 65px',
+                                                        borderRadius: '50px',
+                                                        border: '1px solid rgba(223, 185, 109, 0.2)',
+                                                        background: 'white',
+                                                        color: '#1A0F0A',
+                                                        outline: 'none',
+                                                        fontSize: '1rem',
+                                                        height: '60px',
+                                                        boxShadow: '0 10px 25px rgba(0,0,0,0.03)',
+                                                        transition: 'all 0.3s ease'
+                                                    }}
+                                                />
                                             </div>
                                             <div ref={clientTierDropdownRef} style={{ flex: 1, position: 'relative', minWidth: '250px' }}>
-                                                <button 
+                                                <button
                                                     onClick={() => setIsClientTierDropdownOpen(!isClientTierDropdownOpen)}
-                                                    style={{ 
+                                                    style={{
                                                         width: '100%',
-                                                        padding: '0 50px 0 30px', 
-                                                        borderRadius: '50px', 
-                                                        border: '1px solid rgba(223, 185, 109, 0.3)', 
-                                                        background: 'white', 
-                                                        color: '#DFB96D', 
+                                                        padding: '0 50px 0 30px',
+                                                        borderRadius: '50px',
+                                                        border: '1px solid rgba(223, 185, 109, 0.3)',
+                                                        background: 'white',
+                                                        color: '#DFB96D',
                                                         outline: 'none',
                                                         cursor: 'pointer',
                                                         height: '60px',
@@ -3334,37 +3549,37 @@ export default function Dashboard() {
 
                                                 <AnimatePresence>
                                                     {isClientTierDropdownOpen && (
-                                                        <motion.div 
+                                                        <motion.div
                                                             initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                                             animate={{ opacity: 1, y: 0, scale: 1 }}
                                                             exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                                            style={{ 
-                                                                position: 'absolute', 
-                                                                top: '75px', 
-                                                                right: 0, 
+                                                            style={{
+                                                                position: 'absolute',
+                                                                top: '75px',
+                                                                right: 0,
                                                                 width: '100%',
                                                                 minWidth: '220px',
-                                                                background: 'white', 
-                                                                borderRadius: '25px', 
-                                                                boxShadow: '0 15px 45px rgba(0,0,0,0.15)', 
+                                                                background: 'white',
+                                                                borderRadius: '25px',
+                                                                boxShadow: '0 15px 45px rgba(0,0,0,0.15)',
                                                                 border: '1px solid rgba(223, 185, 109, 0.1)',
                                                                 padding: '12px',
                                                                 zIndex: 1000,
                                                             }}
                                                         >
                                                             {['', 'Normal', 'Membre Gold'].map((tier) => (
-                                                                <button 
+                                                                <button
                                                                     key={tier}
                                                                     onClick={() => {
                                                                         setClientTierFilter(tier);
                                                                         setIsClientTierDropdownOpen(false);
                                                                     }}
-                                                                    style={{ 
-                                                                        width: '100%', 
-                                                                        padding: '12px 20px', 
-                                                                        borderRadius: '15px', 
-                                                                        border: 'none', 
-                                                                        background: clientTierFilter === tier ? 'rgba(223, 185, 109, 0.1)' : 'transparent', 
+                                                                    style={{
+                                                                        width: '100%',
+                                                                        padding: '12px 20px',
+                                                                        borderRadius: '15px',
+                                                                        border: 'none',
+                                                                        background: clientTierFilter === tier ? 'rgba(223, 185, 109, 0.1)' : 'transparent',
                                                                         color: clientTierFilter === tier ? '#DFB96D' : '#1A0F0A',
                                                                         textAlign: 'left',
                                                                         fontSize: '0.9rem',
@@ -3386,10 +3601,10 @@ export default function Dashboard() {
                                     <div className={styles.clientsList}>
                                         {data?.clients && data.clients.length > 0 ? (
                                             data.clients
-                                                .filter((c: any) => 
-                                                    (c.name.toLowerCase().includes(clientSearch.toLowerCase()) || 
-                                                    c.email.toLowerCase().includes(clientSearch.toLowerCase()) ||
-                                                    (c.phone && c.phone.includes(clientSearch))) &&
+                                                .filter((c: any) =>
+                                                    (c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                                                        c.email.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                                                        (c.phone && c.phone.includes(clientSearch))) &&
                                                     (!clientTierFilter || c.tier === clientTierFilter)
                                                 )
                                                 .map((client: any) => (
@@ -4450,10 +4665,92 @@ export default function Dashboard() {
                             >
                                 <div className={styles.modalHeader}>
                                     <div className={styles.mobileGrabHandle}></div>
-                                    <div className={styles.statIconLux} style={{ background: 'rgba(223, 185, 109, 0.15)', width: '45px', height: '45px' }}>
-                                        <Calendar color="var(--accent)" size={20} />
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                        <div style={{ position: 'relative' }} ref={agendaDatePickerModalRef}>
+                                            <div 
+                                                onClick={(e) => { e.stopPropagation(); setIsAgendaDatePickerOpen(!isAgendaDatePickerOpen); }}
+                                                style={{ 
+                                                    cursor: 'pointer',
+                                                    background: 'rgba(223, 185, 109, 0.1)',
+                                                    padding: '10px',
+                                                    borderRadius: '15px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    transition: 'all 0.3s ease',
+                                                    border: isAgendaDatePickerOpen ? '1px solid #DFB96D' : '1px solid transparent'
+                                                }}
+                                            >
+                                                <Calendar size={24} color="#DFB96D" />
+                                            </div>
+
+                                            <AnimatePresence>
+                                                {isAgendaDatePickerOpen && (
+                                                    <motion.div 
+                                                        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                        style={{ 
+                                                            position: 'absolute', 
+                                                            top: '60px', 
+                                                            left: 0, 
+                                                            zIndex: 1000,
+                                                            background: 'white',
+                                                            borderRadius: '24px',
+                                                            boxShadow: '0 20px 50px rgba(0,0,0,0.15)',
+                                                            border: '1px solid rgba(223, 185, 109, 0.2)',
+                                                            padding: '20px',
+                                                            minWidth: '300px'
+                                                        }}
+                                                    >
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                                                            <button onClick={(e) => { e.stopPropagation(); setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() - 1, 1)); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DFB96D' }}><ChevronLeft size={20} /></button>
+                                                            <span style={{ fontWeight: '800', color: '#1A0F0A', textTransform: 'capitalize' }}>
+                                                                {calendarViewDate.toLocaleDateString(language, { month: 'long', year: 'numeric' })}
+                                                            </span>
+                                                            <button onClick={(e) => { e.stopPropagation(); setCalendarViewDate(new Date(calendarViewDate.getFullYear(), calendarViewDate.getMonth() + 1, 1)); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DFB96D' }}><ChevronRight size={20} /></button>
+                                                        </div>
+                                                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '5px', textAlign: 'center', marginBottom: '10px' }}>
+                                                            {['D', 'L', 'M', 'M', 'J', 'V', 'S'].map((d, idx) => <span key={`${d}-${idx}`} style={{ fontSize: '0.7rem', fontWeight: '900', color: '#9a8878' }}>{d}</span>)}
+                                                            {getDaysInMonth(calendarViewDate).map((date, i) => (
+                                                                <div 
+                                                                    key={i}
+                                                                    onClick={(e) => {
+                                                                        if (date) {
+                                                                            e.stopPropagation();
+                                                                            setAgendaSelectedDate(formatLocalDate(date));
+                                                                            setIsAgendaDatePickerOpen(false);
+                                                                        }
+                                                                    }}
+                                                                    style={{ 
+                                                                        padding: '8px 0',
+                                                                        borderRadius: '10px',
+                                                                        fontSize: '0.9rem',
+                                                                        cursor: date ? 'pointer' : 'default',
+                                                                        background: date && formatLocalDate(date) === agendaSelectedDate ? '#DFB96D' : 'transparent',
+                                                                        color: date && formatLocalDate(date) === agendaSelectedDate ? 'white' : (date ? '#1A0F0A' : 'transparent'),
+                                                                        fontWeight: date && formatLocalDate(date) === agendaSelectedDate ? 'bold' : '500',
+                                                                        transition: 'all 0.2s'
+                                                                    }}
+                                                                >
+                                                                    {date ? date.getDate() : ''}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                        <button 
+                                                            onClick={(e) => { e.stopPropagation(); setAgendaSelectedDate(formatLocalDate(new Date())); setIsAgendaDatePickerOpen(false); setCalendarViewDate(new Date()); }}
+                                                            style={{ width: '100%', padding: '10px', borderRadius: '12px', border: '1px solid #DFB96D', background: 'rgba(223, 185, 109, 0.05)', color: '#DFB96D', fontWeight: 'bold', fontSize: '0.8rem', cursor: 'pointer' }}
+                                                        >
+                                                            Aujourd'hui
+                                                        </button>
+                                                    </motion.div>
+                                                )}
+                                            </AnimatePresence>
+                                        </div>
+                                        <h3 style={{ margin: 0 }}>
+                                            {agendaSelectedDate === formatLocalDate(new Date()) ? "Agenda Complet du Jour" : `Agenda du ${new Date(agendaSelectedDate).toLocaleDateString(language, { day: 'numeric', month: 'long', year: 'numeric' })}`}
+                                        </h3>
                                     </div>
-                                    <h3>Agenda Complet du Jour</h3>
                                     <div style={{ marginLeft: 'auto', display: 'flex', gap: '1rem', alignItems: 'center' }}>
                                         <button onClick={() => setIsAgendaModalOpen(false)} className={styles.closeBtn}>×</button>
                                     </div>
@@ -4529,7 +4826,11 @@ export default function Dashboard() {
                                             </div>
                                         ))}
                                         {getTodaysAgenda().length === 0 && (
-                                            <div className={styles.noDataText}>Aucun rendez-vous aujourd'hui.</div>
+                                            <div className={styles.noDataText}>
+                                                {agendaSelectedDate === formatLocalDate(new Date()) 
+                                                    ? "Aucun rendez-vous aujourd'hui." 
+                                                    : `Aucun rendez-vous pour le ${new Date(agendaSelectedDate).toLocaleDateString(language, { day: 'numeric', month: 'long' })}.`}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -5040,16 +5341,7 @@ export default function Dashboard() {
                                                     <input
                                                         type="file"
                                                         accept="image/*"
-                                                        onChange={async (e) => {
-                                                            const file = e.target.files?.[0];
-                                                            if (file) {
-                                                                const reader = new FileReader();
-                                                                reader.onloadend = () => {
-                                                                    setNewSpecialist({ ...newSpecialist, image: reader.result as string });
-                                                                };
-                                                                reader.readAsDataURL(file);
-                                                            }
-                                                        }}
+                                                        onChange={(e) => handleFileUpload(e, 'newSpecialist')}
                                                         style={{ display: 'none' }}
                                                         id="specialist-image-upload"
                                                     />
@@ -5219,42 +5511,42 @@ export default function Dashboard() {
                                 </div>
                                 <div className={styles.modalBody}>
                                     <div style={{ display: 'grid', gap: '20px' }}>
-                                            <div className={styles.previewTile}>
-                                                <div style={{ width: '100%', height: '100%' }} onClick={() => document.getElementById('new-service-upload')?.click()}>
-                                                    {newService.image ? (
-                                                        <img src={newService.image} alt="Preview" />
-                                                    ) : (
-                                                        <div className={styles.previewPlaceholder}>
-                                                            <Upload className="text-gold" />
-                                                            <span>{t('uploadImage') || 'Télécharger une image'}</span>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                {newService.image && (
-                                                    <button 
-                                                        className={styles.deleteImageBtn}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setNewService({ ...newService, image: '' });
-                                                        }}
-                                                        title="Supprimer la photo"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
-                                                {isUploading && (
-                                                    <div className={styles.uploadLoading}>
-                                                        <Loader2 className="animate-spin text-gold" />
+                                        <div className={styles.previewTile}>
+                                            <div style={{ width: '100%', height: '100%' }} onClick={() => document.getElementById('new-service-upload')?.click()}>
+                                                {newService.image ? (
+                                                    <img src={newService.image} alt="Preview" />
+                                                ) : (
+                                                    <div className={styles.previewPlaceholder}>
+                                                        <Upload className="text-gold" />
+                                                        <span>{t('uploadImage') || 'Télécharger une image'}</span>
                                                     </div>
                                                 )}
                                             </div>
-                                            <input
-                                                id="new-service-upload"
-                                                type="file"
-                                                accept="image/*"
-                                                style={{ display: 'none' }}
-                                                onChange={(e) => handleFileUpload(e, 'new')}
-                                            />
+                                            {newService.image && (
+                                                <button
+                                                    className={styles.deleteImageBtn}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setNewService({ ...newService, image: '' });
+                                                    }}
+                                                    title="Supprimer la photo"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                            {isUploading && (
+                                                <div className={styles.uploadLoading}>
+                                                    <Loader2 className="animate-spin text-gold" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <input
+                                            id="new-service-upload"
+                                            type="file"
+                                            accept="image/*"
+                                            style={{ display: 'none' }}
+                                            onChange={(e) => handleFileUpload(e, 'new')}
+                                        />
                                         <div className={styles.inputGroup}>
                                             <label>{t('name')}</label>
                                             <input
@@ -5447,46 +5739,46 @@ export default function Dashboard() {
                                 </div>
                                 <div className={styles.modalBody}>
                                     <div style={{ display: 'grid', gap: '20px' }}>
-                                            <div className={styles.previewTile}>
-                                                <div style={{ width: '100%', height: '100%' }} onClick={() => document.getElementById('edit-service-upload')?.click()}>
-                                                    {editingService.image ? (
-                                                        <img src={editingService.image} alt="Preview" />
-                                                    ) : (
-                                                        <div className={styles.previewPlaceholder}>
-                                                            <Upload className="text-gold" />
-                                                            <span>{t('uploadImage') || 'Télécharger une image'}</span>
-                                                        </div>
-                                                    )}
-                                                    <div className={styles.uploadOverlay}>
-                                                        <Upload size={24} />
-                                                        <span>{t('changeImage') || 'Changer l\'image'}</span>
+                                        <div className={styles.previewTile}>
+                                            <div style={{ width: '100%', height: '100%' }} onClick={() => document.getElementById('edit-service-upload')?.click()}>
+                                                {editingService.image ? (
+                                                    <img src={editingService.image} alt="Preview" />
+                                                ) : (
+                                                    <div className={styles.previewPlaceholder}>
+                                                        <Upload className="text-gold" />
+                                                        <span>{t('uploadImage') || 'Télécharger une image'}</span>
                                                     </div>
+                                                )}
+                                                <div className={styles.uploadOverlay}>
+                                                    <Upload size={24} />
+                                                    <span>{t('changeImage') || 'Changer l\'image'}</span>
                                                 </div>
-                                                {editingService.image && (
-                                                    <button 
-                                                        className={styles.deleteImageBtn}
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setEditingService({ ...editingService, image: '' });
-                                                        }}
-                                                        title="Supprimer la photo"
-                                                    >
-                                                        <Trash2 size={16} />
-                                                    </button>
-                                                )}
-                                                {isUploading && (
-                                                    <div className={styles.uploadLoading}>
-                                                        <Loader2 className="animate-spin text-gold" />
-                                                    </div>
-                                                )}
                                             </div>
-                                            <input
-                                                id="edit-service-upload"
-                                                type="file"
-                                                accept="image/*"
-                                                style={{ display: 'none' }}
-                                                onChange={(e) => handleFileUpload(e, 'edit')}
-                                            />
+                                            {editingService.image && (
+                                                <button
+                                                    className={styles.deleteImageBtn}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setEditingService({ ...editingService, image: '' });
+                                                    }}
+                                                    title="Supprimer la photo"
+                                                >
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                            {isUploading && (
+                                                <div className={styles.uploadLoading}>
+                                                    <Loader2 className="animate-spin text-gold" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <input
+                                            id="edit-service-upload"
+                                            type="file"
+                                            accept="image/*"
+                                            style={{ display: 'none' }}
+                                            onChange={(e) => handleFileUpload(e, 'edit')}
+                                        />
                                         <div className={styles.inputGroup}>
                                             <label>{t('name')}</label>
                                             <input
@@ -5727,15 +6019,15 @@ export default function Dashboard() {
                                     <div className={styles.modalActions} style={{ marginTop: '30px' }}>
                                         <button className={styles.btnCancel} onClick={() => setIsAddProductModalOpen(false)}>{t('cancel')}</button>
                                         <button className={styles.btnSaveLux} onClick={async () => {
-                                             if (!newProduct.name || !newProduct.price) {
-                                                 swalLux('warning', t('fillAllFields') || 'Veuillez remplir tous les champs obligatoires');
-                                                 return;
-                                             }
-                                             const priceNum = parseFloat(newProduct.price);
-                                             if (isNaN(priceNum)) {
-                                                 swalLux('error', 'Prix invalide');
-                                                 return;
-                                             }
+                                            if (!newProduct.name || !newProduct.price) {
+                                                swalLux('warning', t('fillAllFields') || 'Veuillez remplir tous les champs obligatoires');
+                                                return;
+                                            }
+                                            const priceNum = parseFloat(newProduct.price);
+                                            if (isNaN(priceNum)) {
+                                                swalLux('error', 'Prix invalide');
+                                                return;
+                                            }
                                             try {
                                                 await addProduct({
                                                     variables: {
@@ -5836,15 +6128,15 @@ export default function Dashboard() {
                                     <div className={styles.modalActions} style={{ marginTop: '30px' }}>
                                         <button className={styles.btnCancel} onClick={() => setIsEditProductModalOpen(false)}>{t('cancel')}</button>
                                         <button className={styles.btnSaveLux} onClick={async () => {
-                                             if (!editingProduct.name || !editingProduct.price) {
-                                                 swalLux('warning', t('fillAllFields') || 'Veuillez remplir tous les champs obligatoires');
-                                                 return;
-                                             }
-                                             const priceNum = parseFloat(editingProduct.price);
-                                             if (isNaN(priceNum)) {
-                                                 swalLux('error', 'Prix invalide');
-                                                 return;
-                                             }
+                                            if (!editingProduct.name || !editingProduct.price) {
+                                                swalLux('warning', t('fillAllFields') || 'Veuillez remplir tous les champs obligatoires');
+                                                return;
+                                            }
+                                            const priceNum = parseFloat(editingProduct.price);
+                                            if (isNaN(priceNum)) {
+                                                swalLux('error', 'Prix invalide');
+                                                return;
+                                            }
                                             try {
                                                 await updateProduct({
                                                     variables: {
@@ -6985,8 +7277,8 @@ export default function Dashboard() {
                                                     value={newCategoryName}
                                                     onChange={(e) => setNewCategoryName(e.target.value)}
                                                 />
-                                                <button 
-                                                    className={styles.btnSaveLux} 
+                                                <button
+                                                    className={styles.btnSaveLux}
                                                     style={{ width: 'auto', padding: '0 25px' }}
                                                     onClick={editingCategory ? handleUpdateCategory : handleAddCategory}
                                                 >
@@ -6997,18 +7289,18 @@ export default function Dashboard() {
 
                                         <div className={styles.categoryList} style={{ maxHeight: '300px', overflowY: 'auto' }}>
                                             {data?.serviceCategories?.map((cat: any) => (
-                                                <div key={cat.id} style={{ 
-                                                    display: 'flex', 
-                                                    justifyContent: 'space-between', 
-                                                    alignItems: 'center', 
-                                                    padding: '12px 15px', 
-                                                    background: 'rgba(223, 185, 109, 0.05)', 
-                                                    borderRadius: '12px', 
-                                                    marginBottom: '10px' 
+                                                <div key={cat.id} style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    padding: '12px 15px',
+                                                    background: 'rgba(223, 185, 109, 0.05)',
+                                                    borderRadius: '12px',
+                                                    marginBottom: '10px'
                                                 }}>
                                                     <span style={{ fontWeight: 600 }}>{cat.name}</span>
                                                     <div style={{ display: 'flex', gap: '10px' }}>
-                                                        <button 
+                                                        <button
                                                             style={{ background: 'transparent', border: 'none', color: 'var(--accent)', cursor: 'pointer' }}
                                                             onClick={() => {
                                                                 setEditingCategory(cat);
@@ -7017,7 +7309,7 @@ export default function Dashboard() {
                                                         >
                                                             <Edit2 size={16} />
                                                         </button>
-                                                        <button 
+                                                        <button
                                                             style={{ background: 'transparent', border: 'none', color: '#ff4444', cursor: 'pointer' }}
                                                             onClick={() => handleRemoveCategory(cat.id)}
                                                         >
@@ -7096,6 +7388,86 @@ export default function Dashboard() {
                     </motion.button>
                 </>
             )}
+
+            {/* Image Crop Modal */}
+            <AnimatePresence>
+                {isCropModalOpen && imageToCrop && (
+                    <div key="crop-modal-overlay" className={styles.modalOverlay} style={{ zIndex: 10000 }} onClick={() => setIsCropModalOpen(false)}>
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className={styles.modal}
+                            style={{ maxWidth: '500px', width: '90%', height: '600px', display: 'flex', flexDirection: 'column' }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className={styles.modalHeader}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                    <div className={styles.statIconLux} style={{ background: 'rgba(223, 185, 109, 0.1)', width: '40px', height: '40px' }}>
+                                        <Camera className="text-gold" size={20} />
+                                    </div>
+                                    <h3 style={{ margin: 0 }}>Recadrer la Photo</h3>
+                                </div>
+                                <button className={styles.closeModal} onClick={() => setIsCropModalOpen(false)}>×</button>
+                            </div>
+                            <div className={styles.modalBody} style={{ flex: 1, position: 'relative', background: '#1A0F0A', overflow: 'hidden', minHeight: '300px' }}>
+                                <Cropper
+                                    image={imageToCrop}
+                                    crop={crop}
+                                    zoom={zoom}
+                                    aspect={1}
+                                    onCropChange={setCrop}
+                                    onZoomChange={setZoom}
+                                    onCropComplete={(_, pixels) => setCroppedAreaPixels(pixels)}
+                                />
+                            </div>
+                            <div className={styles.modalFooter} style={{ padding: '20px', display: 'flex', gap: '15px', justifyContent: 'center', background: '#F8F5F0', borderTop: '1px solid rgba(223, 185, 109, 0.1)' }}>
+                                <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <span style={{ fontSize: '0.8rem', color: '#9a8878' }}>Zoom:</span>
+                                    <input
+                                        type="range"
+                                        value={zoom}
+                                        min={1}
+                                        max={3}
+                                        step={0.1}
+                                        aria-labelledby="Zoom"
+                                        onChange={(e) => setZoom(Number(e.target.value))}
+                                        style={{ flex: 1, accentColor: '#DFB96D' }}
+                                    />
+                                </div>
+                                <button 
+                                    className="btn-lux" 
+                                    style={{ background: 'transparent', border: '1px solid var(--accent)', color: 'var(--accent)', padding: '10px 20px' }}
+                                    onClick={() => setIsCropModalOpen(false)}
+                                >
+                                    Annuler
+                                </button>
+                                <button 
+                                    className="btn-lux"
+                                    style={{ padding: '10px 20px' }}
+                                    onClick={async () => {
+                                        try {
+                                            const croppedImage = await getCroppedImg(imageToCrop, croppedAreaPixels);
+                                            if (cropType === 'add') {
+                                                setNewSpecialist({ ...newSpecialist, image: croppedImage });
+                                            } else if (cropType === 'edit') {
+                                                setSelectedSpecialistForHistorique({ ...selectedSpecialistForHistorique, image: croppedImage });
+                                            }
+                                            setIsCropModalOpen(false);
+                                            setImageToCrop(null);
+                                        } catch (e) {
+                                            console.error(e);
+                                            swalLux('error', 'Erreur', 'Impossible de recadrer l\'image');
+                                        }
+                                    }}
+                                >
+                                    Appliquer
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </div >
     );
 }
