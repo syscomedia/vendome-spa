@@ -92,6 +92,7 @@ import {
     REMOVE_DRINK,
     UPDATE_RESERVATION_DRINK
 } from '@/graphql/queries';
+import { createImage, getCroppedImg } from '@/lib/imageUtils';
 import {
     CREATE_RESERVATION_MUTATION,
     ADD_WAITING_COMMENT_MUTATION,
@@ -264,49 +265,6 @@ const ServiceItem = ({ service, t, styles, toggleService, removeService, setEdit
     </div>
 );
 
-const createImage = (url: string): Promise<HTMLImageElement> =>
-    new Promise((resolve, reject) => {
-        const image = new Image();
-        image.addEventListener('load', () => resolve(image));
-        image.addEventListener('error', (error) => reject(error));
-        image.setAttribute('crossOrigin', 'anonymous');
-        image.src = url;
-    });
-
-async function getCroppedImg(imageSrc: string, pixelCrop: any): Promise<string> {
-    const image = await createImage(imageSrc);
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-
-    if (!ctx) return '';
-
-    canvas.width = pixelCrop.width;
-    canvas.height = pixelCrop.height;
-
-    ctx.drawImage(
-        image,
-        pixelCrop.x,
-        pixelCrop.y,
-        pixelCrop.width,
-        pixelCrop.height,
-        0,
-        0,
-        pixelCrop.width,
-        pixelCrop.height
-    );
-
-    return new Promise((resolve) => {
-        canvas.toBlob((blob) => {
-            if (!blob) return;
-            const reader = new FileReader();
-            reader.readAsDataURL(blob);
-            reader.onloadend = () => {
-                resolve(reader.result as string);
-            };
-        }, 'image/jpeg');
-    });
-}
-
 export default function Dashboard() {
     const [mounted, setMounted] = useState(false);
     const [user, setUser] = useState<any>(null);
@@ -319,52 +277,62 @@ export default function Dashboard() {
         variables: { userId: user?.id }
     });
     const { data: feedbackData } = useQuery<FeedbackData>(GET_ALL_FEEDBACK, { skip: user?.role !== 'admin' });
+    const dashboardVariables = { userId: user?.role === 'admin' ? null : user?.id };
+    const waitingVariables = { userId: user?.id };
+    const standardRefetch = [
+        { query: GET_DASHBOARD_DATA, variables: dashboardVariables },
+        { query: GET_WAITING_DATA, variables: waitingVariables }
+    ];
+
     const [createReservation] = useMutation(CREATE_RESERVATION_MUTATION, {
-        refetchQueries: [
-            { query: GET_WAITING_DATA, variables: { userId: user?.id } },
-            { query: GET_DASHBOARD_DATA, variables: { userId: user?.role === 'admin' ? null : user?.id } }
-        ]
+        refetchQueries: standardRefetch
     });
-    const [addWaitingComment] = useMutation(ADD_WAITING_COMMENT_MUTATION);
-    const [addTip] = useMutation(ADD_TIP_MUTATION);
+    const [addWaitingComment] = useMutation(ADD_WAITING_COMMENT_MUTATION, {
+        refetchQueries: standardRefetch
+    });
+    const [addTip] = useMutation(ADD_TIP_MUTATION, {
+        refetchQueries: standardRefetch
+    });
     const [applyReferralCode] = useMutation(APPLY_REFERRAL_CODE_MUTATION, {
-        refetchQueries: [{ query: GET_DASHBOARD_DATA, variables: { userId: user?.role === 'admin' ? null : user?.id } }]
+        refetchQueries: standardRefetch
     });
     const [generateReferralCode] = useMutation(GENERATE_REFERRAL_CODE_MUTATION, {
-        refetchQueries: [{ query: GET_DASHBOARD_DATA, variables: { userId: user?.role === 'admin' ? null : user?.id } }]
+        refetchQueries: standardRefetch
     });
-    const [addPersonnelEvaluation] = useMutation(ADD_PERSONNEL_EVALUATION_MUTATION);
+    const [addPersonnelEvaluation] = useMutation(ADD_PERSONNEL_EVALUATION_MUTATION, {
+        refetchQueries: [{ query: GET_ALL_FEEDBACK }]
+    });
     const [deleteReservation] = useMutation(DELETE_RESERVATION_MUTATION, {
-        refetchQueries: [{ query: GET_WAITING_DATA, variables: { userId: user?.id } }]
+        refetchQueries: standardRefetch
     });
 
-    const [toggleService] = useMutation(TOGGLE_SERVICE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [removeService] = useMutation(REMOVE_SERVICE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [toggleService] = useMutation(TOGGLE_SERVICE_MUTATION, { refetchQueries: standardRefetch });
+    const [removeService] = useMutation(REMOVE_SERVICE_MUTATION, { refetchQueries: standardRefetch });
 
-    const [removeUser] = useMutation(REMOVE_USER_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [addService] = useMutation(ADD_SERVICE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [updateUser] = useMutation(UPDATE_USER_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [updateService] = useMutation(UPDATE_SERVICE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [addProduct] = useMutation(ADD_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
-    const [updateProduct] = useMutation(UPDATE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
-    const [removeProduct] = useMutation(REMOVE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
-    const [toggleProduct, { loading: isTogglingProduct }] = useMutation(TOGGLE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }] });
-    const [updateReservationStatus] = useMutation(UPDATE_RESERVATION_STATUS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }, { query: GET_WAITING_DATA, variables: { userId: user?.id } }] });
-    const [updateReservationDate] = useMutation(UPDATE_RESERVATION_DATE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [updateSpecialist] = useMutation(UPDATE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [deleteSpecialist] = useMutation(DELETE_SPECIALIST_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [deductPoints] = useMutation(DEDUCT_POINTS_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [registerClient] = useMutation(REGISTER_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [addSpecialist] = useMutation(ADD_PRESTATAIRE_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [syncGoogleCalendar] = useMutation(SYNC_GOOGLE_CALENDAR_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [convertExternalToReservation] = useMutation(CONVERT_EXTERNAL_TO_RESERVATION_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [purchaseProduct] = useMutation(PURCHASE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [addDrink] = useMutation(ADD_DRINK, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [removeDrink] = useMutation(REMOVE_DRINK, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [updateReservationDrink] = useMutation(UPDATE_RESERVATION_DRINK, { refetchQueries: [{ query: GET_DASHBOARD_DATA }, { query: GET_WAITING_DATA, variables: { userId: user?.id } }] });
-    const [addServiceCategory] = useMutation(ADD_SERVICE_CATEGORY_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [updateServiceCategory] = useMutation(UPDATE_SERVICE_CATEGORY_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
-    const [removeServiceCategory] = useMutation(REMOVE_SERVICE_CATEGORY_MUTATION, { refetchQueries: [{ query: GET_DASHBOARD_DATA }] });
+    const [removeUser] = useMutation(REMOVE_USER_MUTATION, { refetchQueries: standardRefetch });
+    const [addService] = useMutation(ADD_SERVICE_MUTATION, { refetchQueries: standardRefetch });
+    const [updateUser] = useMutation(UPDATE_USER_MUTATION, { refetchQueries: standardRefetch });
+    const [updateService] = useMutation(UPDATE_SERVICE_MUTATION, { refetchQueries: standardRefetch });
+    const [addProduct] = useMutation(ADD_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }, { query: GET_DASHBOARD_DATA, variables: dashboardVariables }] });
+    const [updateProduct] = useMutation(UPDATE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }, { query: GET_DASHBOARD_DATA, variables: dashboardVariables }] });
+    const [removeProduct] = useMutation(REMOVE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }, { query: GET_DASHBOARD_DATA, variables: dashboardVariables }] });
+    const [toggleProduct, { loading: isTogglingProduct }] = useMutation(TOGGLE_PRODUCT_MUTATION, { refetchQueries: [{ query: GET_PRODUCTS }, { query: GET_DASHBOARD_DATA, variables: dashboardVariables }] });
+    const [updateReservationStatus] = useMutation(UPDATE_RESERVATION_STATUS_MUTATION, { refetchQueries: standardRefetch });
+    const [updateReservationDate] = useMutation(UPDATE_RESERVATION_DATE_MUTATION, { refetchQueries: standardRefetch });
+    const [updateSpecialist] = useMutation(UPDATE_SPECIALIST_MUTATION, { refetchQueries: standardRefetch });
+    const [deleteSpecialist] = useMutation(DELETE_SPECIALIST_MUTATION, { refetchQueries: standardRefetch });
+    const [deductPoints] = useMutation(DEDUCT_POINTS_MUTATION, { refetchQueries: standardRefetch });
+    const [registerClient] = useMutation(REGISTER_MUTATION, { refetchQueries: standardRefetch });
+    const [addSpecialist] = useMutation(ADD_PRESTATAIRE_MUTATION, { refetchQueries: standardRefetch });
+    const [syncGoogleCalendar] = useMutation(SYNC_GOOGLE_CALENDAR_MUTATION, { refetchQueries: standardRefetch });
+    const [convertExternalToReservation] = useMutation(CONVERT_EXTERNAL_TO_RESERVATION_MUTATION, { refetchQueries: standardRefetch });
+    const [purchaseProduct] = useMutation(PURCHASE_PRODUCT_MUTATION, { refetchQueries: standardRefetch });
+    const [addDrink] = useMutation(ADD_DRINK, { refetchQueries: standardRefetch });
+    const [removeDrink] = useMutation(REMOVE_DRINK, { refetchQueries: standardRefetch });
+    const [updateReservationDrink] = useMutation(UPDATE_RESERVATION_DRINK, { refetchQueries: standardRefetch });
+    const [addServiceCategory] = useMutation(ADD_SERVICE_CATEGORY_MUTATION, { refetchQueries: standardRefetch });
+    const [updateServiceCategory] = useMutation(UPDATE_SERVICE_CATEGORY_MUTATION, { refetchQueries: standardRefetch });
+    const [removeServiceCategory] = useMutation(REMOVE_SERVICE_CATEGORY_MUTATION, { refetchQueries: standardRefetch });
 
     const getColorHex = (id: string) => GOOGLE_CALENDAR_COLORS.find(c => c.id === id)?.hex || 'transparent';
 
@@ -3320,7 +3288,7 @@ export default function Dashboard() {
                                             <div style={{ fontSize: '4rem', marginBottom: '20px' }}>🗓️</div>
                                             <h3 style={{ fontSize: '1.8rem' }}>{t('noSessionsToday')}</h3>
                                             <p style={{ color: '#888', maxWidth: '400px', margin: '20px auto' }}>{t('noAppointmentsDesc')}</p>
-                                            <button className="btn-lux" onClick={() => window.location.reload()}>{t('bookASession')}</button>
+                                            <button className="btn-lux" onClick={() => setIsAddReservationModalOpen(true)}>{t('bookASession')}</button>
                                         </div>
                                     );
                                 })()}

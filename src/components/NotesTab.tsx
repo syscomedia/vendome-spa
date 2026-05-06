@@ -230,19 +230,26 @@ export default function NotesTab({ user, styles, t }: NotesTabProps) {
     const [noteContent, setNoteContent] = useState('');
     const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
     
+    const dashboardVariables = { userId: user.role === 'admin' ? null : user.id };
+    
     // For admin, we might want to fetch all notes or notes for a selected client
     const { data, loading, refetch } = useQuery<any>(GET_CLIENT_NOTES, {
         variables: { clientId: user.role === 'admin' ? selectedClientId : user.id },
         fetchPolicy: 'network-only'
     });
 
-    const { data: dashboardData } = useQuery<any>(GET_DASHBOARD_DATA);
+    const { data: dashboardData } = useQuery<any>(GET_DASHBOARD_DATA, {
+        variables: dashboardVariables
+    });
     const clients = dashboardData?.clients || [];
 
     const [addNote, { loading: adding }] = useMutation(ADD_CLIENT_NOTE_MUTATION, {
+        refetchQueries: [
+            { query: GET_CLIENT_NOTES, variables: { clientId: user.role === 'admin' ? selectedClientId : user.id } },
+            { query: GET_DASHBOARD_DATA, variables: dashboardVariables }
+        ],
         onCompleted: () => {
             setNoteContent('');
-            refetch();
             Swal.fire({
                 title: 'Note enregistrée',
                 icon: 'success',

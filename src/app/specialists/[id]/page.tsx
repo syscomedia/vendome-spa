@@ -12,6 +12,8 @@ import styles from './specialist-detail.module.css';
 import { useQuery, useMutation } from '@apollo/client/react';
 import { GET_SPECIALIST, GET_DASHBOARD_DATA } from '@/graphql/queries';
 import { UPDATE_SPECIALIST_MUTATION } from '@/graphql/mutations';
+import Cropper from 'react-easy-crop';
+import { createImage, getCroppedImg } from '@/lib/imageUtils';
 import {
     ArrowLeft,
     Star,
@@ -45,6 +47,11 @@ export default function SpecialistDetail() {
     const [isEditingHeader, setIsEditingHeader] = useState(false);
     const [bioValue, setBioValue] = useState('');
     const [headerForm, setHeaderForm] = useState({ name: '', role: '', specialty: '' });
+    const [imageToCrop, setImageToCrop] = useState<string | null>(null);
+    const [crop, setCrop] = useState({ x: 0, y: 0 });
+    const [zoom, setZoom] = useState(1);
+    const [croppedAreaPixels, setCroppedAreaPixels] = useState<any>(null);
+    const [isCropModalOpen, setIsCropModalOpen] = useState(false);
 
     useEffect(() => setMounted(true), []);
 
@@ -52,8 +59,13 @@ export default function SpecialistDetail() {
         variables: { id: params.id }
     });
 
+    const dashboardVariables = { userId: (session?.user as any)?.role === 'admin' ? null : (session?.user as any)?.id };
+
     const [updateSpecialist] = useMutation(UPDATE_SPECIALIST_MUTATION, {
-        refetchQueries: [{ query: GET_SPECIALIST, variables: { id: params.id } }, { query: GET_DASHBOARD_DATA }]
+        refetchQueries: [
+            { query: GET_SPECIALIST, variables: { id: params.id } }, 
+            { query: GET_DASHBOARD_DATA, variables: dashboardVariables }
+        ]
     });
 
     const staff = specialistData?.prestataire;
@@ -607,7 +619,8 @@ export default function SpecialistDetail() {
                                                 if (file) {
                                                     const reader = new FileReader();
                                                     reader.onloadend = () => {
-                                                        setEditForm({ ...editForm, image: reader.result as string });
+                                                        setImageToCrop(reader.result as string);
+                                                        setIsCropModalOpen(true);
                                                     };
                                                     reader.readAsDataURL(file);
                                                 }
@@ -687,6 +700,82 @@ export default function SpecialistDetail() {
                                     Enregistrer les Modifications
                                 </button>
                             </div>
+                        </div>
+                    </motion.div>
+                </div>
+            )}
+        </AnimatePresence>
+
+        {/* Image Crop Modal */}
+        <AnimatePresence>
+            {isCropModalOpen && imageToCrop && (
+                <div key="crop-modal-overlay" className={styles.modalOverlay} style={{ zIndex: 10000 }} onClick={() => setIsCropModalOpen(false)}>
+                    <motion.div
+                        initial={{ scale: 0.9, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.9, opacity: 0 }}
+                        className={styles.modal}
+                        style={{ maxWidth: '500px', width: '90%', height: '600px', display: 'flex', flexDirection: 'column' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className={styles.modalHeader}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                                <div className={styles.statIconLux} style={{ background: 'rgba(223, 185, 109, 0.1)', width: '40px', height: '40px' }}>
+                                    <Sparkles className="text-gold" size={20} />
+                                </div>
+                                <h3 style={{ margin: 0 }}>Recadrer la Photo</h3>
+                            </div>
+                            <button className={styles.closeBtn} onClick={() => setIsCropModalOpen(false)}>×</button>
+                        </div>
+                        <div className={styles.modalBody} style={{ flex: 1, position: 'relative', background: '#1A0F0A', overflow: 'hidden', minHeight: '300px' }}>
+                            <Cropper
+                                image={imageToCrop}
+                                crop={crop}
+                                zoom={zoom}
+                                aspect={1}
+                                onCropChange={setCrop}
+                                onZoomChange={setZoom}
+                                onCropComplete={(_, pixels) => setCroppedAreaPixels(pixels)}
+                            />
+                        </div>
+                        <div className={styles.modalFooter} style={{ padding: '20px', display: 'flex', gap: '15px', justifyContent: 'center', background: '#1A0F0A', borderTop: '1px solid rgba(223, 185, 109, 0.1)' }}>
+                            <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <span style={{ fontSize: '0.8rem', color: '#FFF', opacity: 0.7 }}>Zoom:</span>
+                                <input
+                                    type="range"
+                                    value={zoom}
+                                    min={1}
+                                    max={3}
+                                    step={0.1}
+                                    aria-labelledby="Zoom"
+                                    onChange={(e) => setZoom(Number(e.target.value))}
+                                    style={{ flex: 1, accentColor: '#DFB96D' }}
+                                />
+                            </div>
+                            <button 
+                                className={styles.cancelBtn} 
+                                style={{ padding: '10px 20px' }}
+                                onClick={() => setIsCropModalOpen(false)}
+                            >
+                                Annuler
+                            </button>
+                            <button 
+                                className={styles.saveBtn}
+                                style={{ padding: '10px 20px' }}
+                                onClick={async () => {
+                                    try {
+                                        const croppedImage = await getCroppedImg(imageToCrop, croppedAreaPixels);
+                                        setEditForm({ ...editForm, image: croppedImage });
+                                        setIsCropModalOpen(false);
+                                        setImageToCrop(null);
+                                    } catch (e) {
+                                        console.error(e);
+                                        Swal.fire({ title: 'Erreur', text: 'Impossible de recadrer l\'image', icon: 'error' });
+                                    }
+                                }}
+                            >
+                                Appliquer
+                            </button>
                         </div>
                     </motion.div>
                 </div>
